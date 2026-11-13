@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="RepoDive — discover noteworthy public GitHub repositories one focused project at a time." />
+  <title>RepoDive — Find code worth reading</title>
+  <link rel="preconnect" href="https://api.github.com" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2.1 4.9-4.9 2.1 2.1-4.9 4.9-2.1Z"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 24 24"><path d="m4 16 5-5 4 4 7-8"/><path d="M15 7h5v5"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-4-6 4V4.5Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></symbol>
+    <symbol id="i-fork" viewBox="0 0 24 24"><circle cx="7" cy="5" r="2"/><circle cx="17" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M7 7v2c0 2 1.5 3 5 3s5-1 5-3V7M12 12v5"/></symbol>
+    <symbol id="i-issue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M20 15a3 3 0 0 1-3 3H9l-5 3v-6a3 3 0 0 1-1-2V7a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3v8Z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="19" r="2"/><path d="m8 11 8-5M8 13l8 5"/></symbol>
+    <symbol id="i-diagram" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="5" rx="1"/><rect x="14" y="15" width="7" height="5" rx="1"/><rect x="14" y="4" width="7" height="5" rx="1"/><path d="M10 6.5h4M17.5 9v6M8 9v3.5c0 2 1.5 3 6 3"/></symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 2.8a9.3 9.3 0 0 0-2.9 18.1c.5.1.6-.2.6-.5v-1.8c-2.7.6-3.3-1.1-3.3-1.1-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 0 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.2-4.4-1.1-4.4-4.6 0-1 .4-1.9 1-2.5-.1-.2-.4-1.2.1-2.5 0 0 .8-.3 2.6 1a9 9 0 0 1 4.8 0c1.8-1.3 2.6-1 2.6-1 .5 1.3.2 2.3.1 2.5.7.7 1 1.5 1 2.5 0 3.6-2.2 4.4-4.4 4.6.4.3.7.9.7 1.8v2.7c0 .3.2.6.7.5A9.3 9.3 0 0 0 12 2.8Z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/><path d="m3 8 6-6M21 8l-6-6M21 16l-6 6M3 16l6 6"/></symbol>
+    <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M9 3v6H3M15 3v6h6M21 15h-6v6M3 15h6v6"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"/><path d="m4 8 4-4m12 4-4-4m4 12-4 4M4 16l4 4"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <main class="main-stage">
+      <header class="workspace-header">
+        <div class="global-nav">
+          <nav class="primary-nav" aria-label="Main navigation">
+            <button class="nav-item active" data-view="discover"><svg><use href="#i-compass"/></svg><span>Discover</span></button>
+            <button class="nav-item" data-view="trending"><svg><use href="#i-trend"/></svg><span>Trending</span></button>
+            <button class="nav-item" data-view="saved"><svg><use href="#i-bookmark"/></svg><span>Saved</span><span class="nav-count" id="savedCount">0</span></button>
+          </nav>
+          <span class="sr-only" id="sectionEyebrow">Discover repositories</span>
+          <span class="sr-only" id="sectionTitle">Discover</span>
+          <div class="filter-tray" aria-label="Discovery filters">
+            <div class="filter-group"><div class="chip-grid" id="languageFilters"></div></div>
+            <div class="filter-group"><div class="chip-grid" id="topicFilters"></div></div>
+            <div class="segmented" id="sortFilters">
+              <button class="active" data-sort="stars">Popular</button>
+              <button data-sort="updated">Fresh</button>
+            </div>
+            <button class="header-filter-button" id="desktopFilters" aria-label="Open all discovery filters"><svg><use href="#i-filter"/></svg><span>All filters</span></button>
+            <button class="text-button" id="resetFilters" aria-label="Reset filters">Reset</button>
+          </div>
+          <div class="topbar-actions">
+            <label class="search-box">
+              <svg><use href="#i-search"/></svg>
+              <input id="searchInput" type="search" placeholder="Search by keyword" autocomplete="off" />
+              <kbd>/</kbd>
+            </label>
+          </div>
+        </div>
+      </header>
+
+      <section class="feed" id="feed" aria-live="polite" aria-label="Repository feed"></section>
+      <div class="feed-status" id="feedStatus">Loading public repositories…</div>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Mobile navigation">
+    <button class="active" data-view="discover"><svg><use href="#i-compass"/></svg><span>Discover</span></button>
+    <button data-view="trending"><svg><use href="#i-trend"/></svg><span>Trending</span></button>
+    <button data-view="saved"><svg><use href="#i-bookmark"/></svg><span>Saved</span></button>
+    <button id="mobileFilters"><svg><use href="#i-filter"/></svg><span>Filters</span></button>
+  </nav>
+
+  <dialog class="filter-dialog" id="filterDialog">
+    <div class="filter-sheet-head"><div><strong>Refine discovery</strong><span id="seenCount">Seen repositories stay hidden</span></div><button class="icon-button" id="closeFilters" aria-label="Close filters"><svg><use href="#i-close"/></svg></button></div>
+    <label class="filter-search"><svg><use href="#i-search"/></svg><input id="mobileFilterSearch" type="search" placeholder="Keyword: name, topic or technology" autocomplete="off" /></label>
+    <div class="filter-table">
+      <section class="filter-table-row"><div class="filter-row-label"><h3>Language</h3><p>Primary code language</p></div><div class="sheet-chip-grid" id="mobileLanguageFilters"></div></section>
+      <section class="filter-table-row"><div class="filter-row-label"><h3>Framework &amp; stack</h3><p>Tools and platforms</p></div><div class="sheet-chip-grid" id="mobileFrameworkFilters"></div></section>
+      <section class="filter-table-row"><div class="filter-row-label"><h3>Project type</h3><p>What it is useful for</p></div><div class="sheet-chip-grid" id="mobileTopicFilters"></div></section>
+      <section class="filter-table-row"><div class="filter-row-label"><h3>Discovery</h3><p>How the feed explores</p></div><div class="sheet-option-grid" id="mobileDiscoveryFilters"></div></section>
+      <section class="filter-table-row filter-order-row"><div class="filter-row-label"><h3>Order</h3><p>Choose the final bias</p></div><div class="segmented" id="mobileSortFilters"><button class="active" data-sort="stars">Popular</button><button data-sort="updated">Fresh</button></div></section>
+    </div>
+    <div class="filter-sheet-actions"><button class="secondary-button" id="mobileResetFilters">Reset</button><button class="primary-button" id="applyFilters">Show repositories</button></div>
+  </dialog>
+
+  <dialog class="tech-dialog" id="techDialog">
+    <div class="tech-dialog-head"><div class="tech-dialog-icon"><svg><use href="#i-issue"/></svg></div><button class="icon-button" id="closeTech" aria-label="Close technology details"><svg><use href="#i-close"/></svg></button></div>
+    <p class="eyebrow">DETECTED TECHNOLOGY</p>
+    <h2 id="techTitle">Technology</h2>
+    <p id="techDescription"></p>
+    <div class="tech-context"><span>Found in</span><strong id="techRepo"></strong></div>
+  </dialog>
+
+  <dialog class="comments-dialog" id="commentsDialog">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="dialog-head"><div><h2>Comments <span id="commentsCount">0</span></h2><p id="commentsTitle"></p></div><button class="icon-button" id="closeComments" aria-label="Close comments"><svg><use href="#i-close"/></svg></button></div>
+    <div class="github-identity-banner">
+      <div class="github-identity-icon"><svg><use href="#i-github"/></svg></div>
+      <div><strong>Use your GitHub identity</strong><span>Your handle and avatar appear with every comment.</span></div>
+      <button id="githubSignIn">Connect</button>
+    </div>
+    <div class="comments-list" id="commentsList"></div>
+    <form class="comment-form" id="commentForm">
+      <div class="comment-avatar"><svg><use href="#i-github"/></svg></div>
+      <label><span class="sr-only">Add a comment</span><textarea id="commentInput" rows="1" maxlength="280" placeholder="Add a comment…"></textarea></label>
+      <button type="submit" aria-label="Post comment"><svg><use href="#i-arrow"/></svg></button>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

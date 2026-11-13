@@ -1,0 +1,724 @@
+const fallbackRepos = [
+  { id: 1, name: 'appwrite', full_name: 'appwrite/appwrite', html_url: 'https://github.com/appwrite/appwrite', description: 'A complete backend platform for building modern applications with authentication, databases, storage, functions and realtime APIs.', stargazers_count: 52000, forks_count: 4800, open_issues_count: 720, language: 'TypeScript', topics: ['backend', 'self-hosted', 'developer-tools', 'database'], owner: { login: 'appwrite', avatar_url: 'https://github.com/appwrite.png' }, updated_at: '2026-11-11T00:00:00Z' },
+  { id: 2, name: 'cal.com', full_name: 'calcom/cal.com', html_url: 'https://github.com/calcom/cal.com', description: 'Scheduling infrastructure for everyone. A production-scale Next.js application with teams, workflows and integrations.', stargazers_count: 39000, forks_count: 9300, open_issues_count: 510, language: 'TypeScript', topics: ['nextjs', 'scheduling', 'saas', 'react'], owner: { login: 'calcom', avatar_url: 'https://github.com/calcom.png' }, updated_at: '2026-11-10T00:00:00Z' },
+  { id: 3, name: 'fastapi', full_name: 'fastapi/fastapi', html_url: 'https://github.com/fastapi/fastapi', description: 'A modern, fast web framework for building APIs with Python based on standard type hints.', stargazers_count: 93000, forks_count: 8200, open_issues_count: 190, language: 'Python', topics: ['api', 'python', 'framework', 'openapi'], owner: { login: 'fastapi', avatar_url: 'https://github.com/fastapi.png' }, updated_at: '2026-11-12T00:00:00Z' },
+  { id: 4, name: 'supabase', full_name: 'supabase/supabase', html_url: 'https://github.com/supabase/supabase', description: 'The open source Firebase alternative: Postgres database, authentication, instant APIs, edge functions, realtime and storage.', stargazers_count: 95000, forks_count: 11000, open_issues_count: 420, language: 'TypeScript', topics: ['postgres', 'database', 'realtime', 'backend'], owner: { login: 'supabase', avatar_url: 'https://github.com/supabase.png' }, updated_at: '2026-11-12T00:00:00Z' },
+  { id: 5, name: 'rustdesk', full_name: 'rustdesk/rustdesk', html_url: 'https://github.com/rustdesk/rustdesk', description: 'An open-source remote desktop application designed for self-hosting, with clients across desktop and mobile.', stargazers_count: 106000, forks_count: 15000, open_issues_count: 970, language: 'Rust', topics: ['remote-desktop', 'self-hosted', 'flutter', 'security'], owner: { login: 'rustdesk', avatar_url: 'https://github.com/rustdesk.png' }, updated_at: '2026-11-09T00:00:00Z' },
+  { id: 6, name: 'excalidraw', full_name: 'excalidraw/excalidraw', html_url: 'https://github.com/excalidraw/excalidraw', description: 'A virtual collaborative whiteboard tool with an approachable hand-drawn look and an excellent interactive canvas architecture.', stargazers_count: 110000, forks_count: 11000, open_issues_count: 1300, language: 'TypeScript', topics: ['canvas', 'whiteboard', 'collaboration', 'react'], owner: { login: 'excalidraw', avatar_url: 'https://github.com/excalidraw.png' }, updated_at: '2026-11-10T00:00:00Z' },
+  { id: 7, name: 'remote-jobs', full_name: 'remoteintech/remote-jobs', html_url: 'https://github.com/remoteintech/remote-jobs', description: 'A community-maintained list of technology companies that support remote work and distributed teams.', stargazers_count: 34000, forks_count: 3600, open_issues_count: 70, language: 'JavaScript', topics: ['jobs', 'remote-jobs', 'careers', 'hiring'], owner: { login: 'remoteintech', avatar_url: 'https://github.com/remoteintech.png' }, updated_at: '2026-11-10T00:00:00Z' }
+];
+
+const languages = ['All', 'TypeScript', 'JavaScript', 'Python', 'Rust', 'Go', 'Java', 'C#', 'C++', 'Kotlin', 'Swift', 'Dart', 'Ruby', 'PHP'];
+const frameworks = ['Any', 'React', 'Next.js', 'Vue', 'Svelte', 'Angular', 'Node.js', 'Django', 'FastAPI', 'Flask', 'Rails', 'Laravel', 'Flutter', 'Docker', 'Kubernetes', 'Postgres', 'GraphQL'];
+const topics = ['Any', 'Fun & hobby', 'Professional', 'AI', 'Developer tools', 'Backend', 'Frontend', 'Analytics', 'Visual', 'Learning', 'Games', 'Mobile', 'CLI', 'Security', 'Self-hosted', 'Creative'];
+const discoveryModes = [
+  { id: 'balanced', label: 'For you', detail: 'Varied stars, stacks and activity' },
+  { id: 'hidden', label: 'Hidden gems', detail: 'Useful projects below the usual radar' },
+  { id: 'jobs', label: 'Jobs & careers', detail: 'Job boards, hiring lists and career tools' },
+  { id: 'rising', label: 'New & active', detail: 'Recently pushed projects with momentum' },
+  { id: 'popular', label: 'Established', detail: 'Widely used, high-signal repositories' }
+];
+const frameworkQueries = { React: 'topic:react', 'Next.js': 'topic:nextjs', Vue: 'topic:vue', Svelte: 'topic:svelte', Angular: 'topic:angular', 'Node.js': 'topic:nodejs', Django: 'topic:django', FastAPI: 'topic:fastapi', Flask: 'topic:flask', Rails: 'topic:rails', Laravel: 'topic:laravel', Flutter: 'topic:flutter', Docker: 'topic:docker', Kubernetes: 'topic:kubernetes', Postgres: 'topic:postgresql', GraphQL: 'topic:graphql' };
+const topicQueries = { 'Fun & hobby': 'topic:side-project', Professional: 'topic:production-ready', AI: 'topic:artificial-intelligence', 'Developer tools': 'topic:developer-tools', Backend: 'topic:backend', Frontend: 'topic:frontend', Analytics: 'topic:analytics', Visual: 'topic:data-visualization', Learning: 'topic:education', Games: 'topic:game', Mobile: 'topic:mobile', CLI: 'topic:cli', Security: 'topic:security', 'Self-hosted': 'topic:self-hosted', Creative: 'topic:creative-coding' };
+const jobTopicQueries = ['topic:jobs', 'topic:job-board', 'topic:hiring', 'topic:careers'];
+const languageColors = { TypeScript: '#3178c6', Python: '#3572A5', Rust: '#dea584', Go: '#00ADD8', Java: '#b07219', JavaScript: '#f1e05a', C: '#555555', 'C++': '#f34b7d', HTML: '#e34c26', CSS: '#563d7c', Shell: '#89e051', Ruby: '#701516', PHP: '#4F5D95', Dart: '#00B4AB', Swift: '#f05138', Kotlin: '#A97BFF' };
+const techDescriptions = {
+  TypeScript: 'JavaScript with static types. It helps teams catch mistakes earlier and makes large codebases easier to navigate and refactor.',
+  JavaScript: 'The programming language of the web, commonly used for browser interfaces, servers, tooling, and cross-platform applications.',
+  Python: 'A readable general-purpose language widely used for backend services, automation, data science, machine learning, and developer tooling.',
+  Rust: 'A systems language focused on performance, memory safety, and reliable concurrency without a garbage collector.',
+  Go: 'A compiled language designed for simple, concurrent, networked software such as APIs, infrastructure tools, and cloud services.',
+  Java: 'A strongly typed language commonly used for large backend systems, Android applications, and enterprise software.',
+  HTML: 'The structural markup used to define content and semantics for web pages and web-based interfaces.',
+  CSS: 'The styling language used to control layout, typography, responsiveness, and visual presentation on the web.',
+  Shell: 'Command-line scripts used to automate development, build, deployment, and system-administration workflows.',
+  Markdown: 'A lightweight text format used for documentation, guides, project notes, and repository content.',
+  React: 'A component-based JavaScript library for building interactive user interfaces.',
+  Nextjs: 'A React framework providing routing, server rendering, data loading, and production web-application tooling.',
+  Docker: 'A container platform for packaging applications and their dependencies into repeatable environments.',
+  Kubernetes: 'A platform for deploying, scaling, and operating containerized applications across clusters.',
+  Postgres: 'A powerful relational database known for reliability, standards support, and advanced data features.',
+  Graphql: 'An API query language that lets clients request precisely the data they need.',
+  'Machine learning': 'Techniques that let software learn patterns from data for prediction, classification, generation, and automation.'
+};
+
+const state = { repos: fallbackRepos, view: 'discover', language: 'All', framework: 'Any', topic: 'Any', discovery: 'balanced', sort: 'stars', page: 1, cycle: 0, loading: false, query: '', activeRepo: null, requestId: 0 };
+const saved = new Set(JSON.parse(localStorage.getItem('repodive:saved') || '[]'));
+const liked = new Set(JSON.parse(localStorage.getItem('repodive:liked') || '[]'));
+const seen = new Set(JSON.parse(localStorage.getItem('repodive:seen') || '[]'));
+const delivered = new Set();
+const comments = JSON.parse(localStorage.getItem('repodive:comments') || '{}');
+const readmeCache = new Map();
+const stackCache = new Map();
+const architectureCache = new Map();
+let readmeObserver;
+let seenObserver;
+
+const $ = (selector, scope = document) => scope.querySelector(selector);
+const $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)];
+const feed = $('#feed');
+const feedStatus = $('#feedStatus');
+const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
+const fmt = n => n >= 1e6 ? `${(n/1e6).toFixed(1)}m` : n >= 1e3 ? `${(n/1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n || 0);
+const repoKey = repo => repo.full_name;
+const persistSet = (key, set) => localStorage.setItem(key, JSON.stringify([...set]));
+const jobSignal = /(^|[\s/_-])(jobs?|job[- ]?board|hiring|careers?|internships?|vacancies|recruiting)(?=$|[\s/_-])/i;
+
+function isJobsRepo(repo) {
+  return jobSignal.test(`${repo.full_name || ''} ${repo.description || ''} ${(repo.topics || []).join(' ')}`);
+}
+
+function icon(id) { return `<svg aria-hidden="true"><use href="#${id}"/></svg>`; }
+function renderFilters() {
+  const languageMarkup = languages.map(x => `<button class="filter-chip ${state.language === x ? 'active' : ''}" data-language="${x}">${x}</button>`).join('');
+  const desktopLanguageMarkup = languages.slice(0, 6).map(x => `<button class="filter-chip ${state.language === x ? 'active' : ''}" data-language="${x}">${x}</button>`).join('');
+  const frameworkMarkup = frameworks.map(x => `<button class="filter-chip ${state.framework === x ? 'active' : ''}" data-framework="${x}">${x}</button>`).join('');
+  const topicMarkup = topics.map(x => `<button class="filter-chip ${state.topic === x ? 'active' : ''}" data-topic="${x}">${x}</button>`).join('');
+  const discoveryMarkup = discoveryModes.map(x => `<button class="discovery-option ${state.discovery === x.id ? 'active' : ''}" data-discovery="${x.id}"><span>${x.label}</span><small>${x.detail}</small>${icon('i-check')}</button>`).join('');
+  $('#languageFilters').innerHTML = desktopLanguageMarkup;
+  $('#topicFilters').innerHTML = topicMarkup;
+  $('#mobileLanguageFilters').innerHTML = languageMarkup;
+  $('#mobileFrameworkFilters').innerHTML = frameworkMarkup;
+  $('#mobileTopicFilters').innerHTML = topicMarkup;
+  $('#mobileDiscoveryFilters').innerHTML = discoveryMarkup;
+  $('#seenCount').textContent = seen.size ? `${seen.size} explored repos hidden on this device` : 'Seen repositories stay hidden';
+}
+
+function getFilteredRepos() {
+  let repos = state.view === 'saved' ? state.repos.filter(r => saved.has(repoKey(r))) : state.repos;
+  if (state.discovery === 'hidden') repos = repos.filter(repo => !isJobsRepo(repo));
+  if (state.discovery === 'jobs') repos = repos.filter(isJobsRepo);
+  if (state.query) {
+    const q = state.query.toLowerCase();
+    repos = repos.filter(r => `${r.full_name} ${r.description || ''} ${(r.topics || []).join(' ')}`.toLowerCase().includes(q));
+  }
+  return repos;
+}
+
+function renderFeed() {
+  const repos = getFilteredRepos();
+  if (!repos.length) {
+    feed.innerHTML = `<div class="empty-state"><h2>${state.view === 'saved' ? 'Your reading list is empty.' : 'No repositories found.'}</h2><p>${state.view === 'saved' ? 'Save interesting projects and they will wait here for your next deep dive.' : 'Try a broader stack filter or a different search.'}</p></div>`;
+    return;
+  }
+  feed.innerHTML = repos.map((repo, index) => repoCard(repo, index)).join('');
+  attachCardEvents();
+}
+
+function repoCard(repo, index) {
+  const key = repoKey(repo);
+  const tags = (repo.topics || []).slice(0, 5);
+  const commentCount = (comments[key] || []).length;
+  const archUrl = `https://gitdiagram.com/${encodeURIComponent(repo.owner.login)}/${encodeURIComponent(repo.name)}`;
+  const primaryLanguage = repo.language || 'Mixed';
+  return `<article class="repo-slide" data-repo-key="${esc(key)}">
+    <div class="repo-card">
+      <div class="repo-content">
+        <div class="repo-main">
+          <div class="repo-meta-row">
+            <a class="repo-owner" href="https://github.com/${encodeURIComponent(repo.owner.login)}" target="_blank" rel="noopener">
+              <img src="${esc(repo.owner.avatar_url)}" alt="" loading="lazy" />
+              <strong>@${esc(repo.owner.login)}</strong>
+            </a>
+          </div>
+          <h2 class="repo-name">${esc(repo.name)}</h2>
+          <p class="repo-description">${esc(repo.description || 'A public repository waiting to be explored.')}</p>
+        </div>
+        <div class="detail-deck">
+          <section class="stack-panel deck-panel" data-panel-name="stack" data-stack-repo="${esc(repo.full_name)}" data-primary="${esc(primaryLanguage)}">
+            <div class="stack-heading deck-panel-handle" data-panel-handle="stack"><strong>Tech stack</strong></div>
+            <div class="stack-panel-body deck-panel-body">
+            <div class="stack-items"><button class="stack-chip tech-chip" data-tech="${esc(primaryLanguage)}" data-repo="${esc(repo.full_name)}"><i style="--stack-color:${languageColors[primaryLanguage] || '#8a8f87'}"></i>${esc(primaryLanguage)}</button></div>
+            ${tags.length ? `<div class="tools-row"><span>Also used</span><div>${tags.map(t => `<button class="tool-chip tech-chip" data-tech="${esc(t)}" data-repo="${esc(repo.full_name)}">${esc(t)}</button>`).join('')}</div></div>` : ''}
+            </div>
+          </section>
+          <div class="metrics-row">
+            <span class="metric">${icon('i-star')}<span><strong>${fmt(repo.stargazers_count)}</strong> stars</span></span>
+            <span class="metric">${icon('i-fork')}<span><strong>${fmt(repo.forks_count)}</strong> forks</span></span>
+            <span class="metric">${icon('i-issue')}<span><strong>${fmt(repo.open_issues_count)}</strong> issues</span></span>
+          </div>
+        <section class="readme-preview deck-panel" data-panel-name="readme" data-repo="${esc(repo.full_name)}" data-branch="${esc(repo.default_branch || 'main')}" role="button" tabindex="0" aria-expanded="false" aria-label="Expand repository documentation preview">
+          <div class="readme-panel-handle deck-panel-handle" data-panel-handle="readme"><strong>README</strong><span>Project documentation</span></div>
+          <div class="readme-panel-body deck-panel-body">
+          <span class="readme-state sr-only">Loading repository documentation</span>
+          <div class="readme-copy"><p>${esc(repo.description || 'Open the repository to read its documentation.')}</p></div>
+          <span class="readme-ellipsis" aria-hidden="true">…</span>
+          <a class="readme-link" href="${esc(repo.html_url)}#readme" target="_blank" rel="noopener" aria-label="Open full repository documentation" title="Open full repository documentation">${icon('i-arrow')}</a>
+          </div>
+        </section>
+        <section class="diagram-preview deck-panel" data-panel-name="architecture" data-architecture-repo="${esc(repo.full_name)}" data-branch="${esc(repo.default_branch || 'main')}" data-primary="${esc(primaryLanguage)}" data-topics="${esc(tags.join(','))}" data-gitdiagram="${archUrl}" aria-label="Repository architecture preview">
+          <div class="diagram-preview-head deck-panel-handle" data-panel-handle="architecture"><strong>${icon('i-diagram')} Architecture</strong></div>
+          <div class="diagram-frame deck-panel-body" role="button" tabindex="0" aria-label="Expand repository architecture">
+            <div class="mermaid-canvas" hidden></div>
+            <div class="diagram-fallback" aria-live="polite">
+              <span class="diagram-loading">Loading real architecture...</span>
+            </div>
+            <div class="architecture-insight" hidden></div>
+            <div class="diagram-toolbar" aria-label="Architecture diagram controls">
+              <a class="diagram-tool diagram-external" href="${archUrl}" target="_blank" rel="noopener" aria-label="Open this repository on GitDiagram" title="Open on GitDiagram">${icon('i-diagram')}</a>
+              <button class="diagram-tool diagram-zoom" data-diagram-zoom="out" type="button" aria-label="Zoom out" title="Zoom out">${icon('i-minus')}</button>
+              <button class="diagram-tool diagram-zoom" data-diagram-zoom="fit" type="button" aria-label="Fit diagram" title="Fit diagram">${icon('i-fit')}</button>
+              <button class="diagram-tool diagram-zoom" data-diagram-zoom="in" type="button" aria-label="Zoom in" title="Zoom in">${icon('i-plus')}</button>
+              <button class="diagram-tool diagram-expand" type="button" aria-label="Collapse architecture diagram" aria-expanded="true" title="Collapse architecture">${icon('i-collapse')}</button>
+            </div>
+          </div>
+        </section>
+        </div>
+      </div>
+      <div class="repo-footer">
+        <p class="repo-path">${icon('i-github')} github.com/<strong>${esc(repo.full_name)}</strong></p>
+        <div class="card-actions">
+          <button class="action-button like-button ${liked.has(key) ? 'active' : ''}" data-key="${esc(key)}" aria-label="Like repository" title="Like">${icon('i-star')}</button>
+          <button class="action-button comment-button" data-key="${esc(key)}" aria-label="View comments" title="Comments">${icon('i-message')}<span class="sr-only">${commentCount} comments</span></button>
+          <button class="action-button save-button ${saved.has(key) ? 'active' : ''}" data-key="${esc(key)}" aria-label="Save repository" title="Save">${icon('i-bookmark')}</button>
+          <button class="action-button share-button" data-url="${esc(repo.html_url)}" aria-label="Share repository" title="Share">${icon('i-share')}</button>
+          <a class="open-repo" href="${esc(repo.html_url)}" target="_blank" rel="noopener">${icon('i-github')} Open repo ${icon('i-arrow')}</a>
+        </div>
+      </div>
+    </div>
+  </article>`;
+}
+
+function readmeExcerpt(markdown) {
+  const cleaned = markdown
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[|*_`~>]/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  const paragraphs = [];
+  let current = [];
+  const flush = () => {
+    const text = current.join(' ').replace(/\s+/g, ' ').trim();
+    if (text.length > 35 && !/shields\.io|badge|table of contents/i.test(text)) paragraphs.push(text);
+    current = [];
+  };
+  for (const rawLine of cleaned.split(/\r?\n/)) {
+    const line = rawLine.replace(/^#{1,6}\s*/, '').replace(/^[-+*]\s+/, '').trim();
+    if (!line) { flush(); continue; }
+    if (/^\[!\[|^={3,}$|^-{3,}$/.test(line)) continue;
+    current.push(line);
+    if (current.join(' ').length > 260) flush();
+    if (paragraphs.length >= 5) break;
+  }
+  flush();
+  return paragraphs.slice(0, 5);
+}
+
+async function loadReadmePreview(element) {
+  const fullName = element.dataset.repo;
+  const branch = element.dataset.branch || 'main';
+  const copy = $('.readme-copy', element);
+  const status = $('.readme-state', element);
+  if (readmeCache.has(fullName)) {
+    const paragraphs = readmeCache.get(fullName);
+    copy.innerHTML = paragraphs.map(text => `<p>${esc(text)}</p>`).join('');
+    status.textContent = 'README preview';
+    return;
+  }
+  const [owner, repo] = fullName.split('/');
+  const branches = [...new Set([branch, 'main', 'master'])];
+  try {
+    let markdown = '';
+    for (const candidate of branches) {
+      for (const filename of ['README.md', 'readme.md', 'Readme.md']) {
+        const url = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(candidate)}/${filename}`;
+        const response = await fetch(url);
+        if (response.ok) { markdown = await response.text(); break; }
+      }
+      if (markdown) break;
+    }
+    const paragraphs = readmeExcerpt(markdown);
+    if (!paragraphs.length) throw new Error('No readable README excerpt');
+    readmeCache.set(fullName, paragraphs);
+    copy.innerHTML = paragraphs.map(text => `<p>${esc(text)}</p>`).join('');
+    status.textContent = 'README preview';
+  } catch {
+    status.textContent = 'Description preview';
+  }
+}
+
+function renderStack(element, languages) {
+  const items = $('.stack-items', element);
+  items.innerHTML = languages.slice(0, 4).map(language => `<button class="stack-chip tech-chip" data-tech="${esc(language)}" data-repo="${esc(element.dataset.stackRepo)}"><i style="--stack-color:${languageColors[language] || '#8a8f87'}"></i>${esc(language)}</button>`).join('');
+}
+
+function architectureNodeDescription(name, type) {
+  const known = {
+    src: 'Primary application source and core implementation.', app: 'Application entry points, routes, or product features.', apps: 'Separate runnable applications in this repository.', packages: 'Reusable packages shared across the project.', tests: 'Automated tests and quality checks.', test: 'Automated tests and quality checks.', docs: 'Project documentation and technical guides.', examples: 'Reference implementations and usage examples.', public: 'Static assets served directly by the application.', api: 'API routes, handlers, or service contracts.', server: 'Backend runtime, services, and server-side logic.', client: 'Client-side interface and browser application.', components: 'Reusable interface or application components.', '.github': 'GitHub automation, issue templates, and contribution workflows.', 'package.json': 'JavaScript package metadata, scripts, and dependencies.', dockerfile: 'Container build instructions for repeatable deployment.', 'readme.md': 'The project overview, setup steps, and usage documentation.'
+  };
+  return known[name.toLowerCase()] || (type !== 'file' ? `${name} is a module, workspace, or major project concern detected in this repository.` : `${name} is a top-level project or configuration file.`);
+}
+
+function renderArchitectureFallback(element, entries) {
+  const fallback = $('.diagram-fallback', element);
+  const usable = entries.filter(item => !['.gitignore', 'license', 'license.md'].includes(item.name.toLowerCase())).slice(0, 12);
+  if (!usable.length) { fallback.innerHTML = '<span class="diagram-loading">Structure unavailable</span>'; return; }
+  const positions = [[5, 9], [37, 5], [70, 9], [4, 38], [72, 38], [5, 71], [38, 76], [71, 71], [21, 23], [58, 23], [21, 58], [58, 58]];
+  const positionByPath = new Map(usable.map((item, index) => [item.path || item.name, positions[index]]));
+  const lines = usable.map((item, i) => {
+    const parent = positionByPath.get(item.parent);
+    return `<line x1="${parent ? parent[0] + 10 : 50}" y1="${parent ? parent[1] + 6 : 50}" x2="${positions[i][0] + 10}" y2="${positions[i][1] + 6}" />`;
+  }).join('');
+  const nodes = usable.map((item, i) => `<button class="architecture-node" style="--node-x:${positions[i][0]}%;--node-y:${positions[i][1]}%" data-node-name="${esc(item.name)}" data-node-kind="${esc(item.type)}" data-node-url="${esc(item.html_url || '')}" type="button"><span>${item.type === 'file' ? 'FILE' : 'MODULE'}</span>${esc(item.name)}</button>`).join('');
+  fallback.innerHTML = `<svg class="architecture-lines" viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg><div class="architecture-root">${esc(element.dataset.architectureRepo.split('/')[1])}</div>${nodes}`;
+}
+
+let mermaidModulePromise;
+function loadMermaidModule() {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import('https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.esm.min.mjs').then(module => {
+      const mermaid = module.default;
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'antiscript', theme: 'base', flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'basis' }, themeVariables: { primaryColor: '#eaf1ff', primaryBorderColor: '#6b9cff', primaryTextColor: '#18211b', lineColor: '#6f776f', secondaryColor: '#fff0d8', tertiaryColor: '#f0f3ee', clusterBkg: '#f7f8f5', clusterBorder: '#d6dbd3', fontFamily: 'Inter, ui-sans-serif, system-ui' } });
+      return mermaid;
+    });
+  }
+  return mermaidModulePromise;
+}
+
+async function fetchGitDiagramGraph(fullName) {
+  const response = await fetch('https://gitdiagram.com/mcp', {
+    method: 'POST',
+    headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_repository_diagram', arguments: { repository: fullName } } })
+  });
+  if (!response.ok) throw new Error('GitDiagram graph unavailable');
+  const eventStream = await response.text();
+  const dataLine = eventStream.split(/\r?\n/).find(line => line.startsWith('data: '));
+  if (!dataLine) throw new Error('GitDiagram returned no graph');
+  const payload = JSON.parse(dataLine.slice(6));
+  const artifact = payload.result?._meta?.['com.gitdiagram/diagram'];
+  if (artifact?.status !== 'found' || !artifact.mermaid) throw new Error('GitDiagram has not generated this repository');
+  return artifact.mermaid;
+}
+
+async function renderMermaidArchitecture(element, source) {
+  const mermaid = await loadMermaidModule();
+  const canvas = $('.mermaid-canvas', element);
+  const id = `repo-architecture-${Math.abs(hashText(element.dataset.architectureRepo))}-${Date.now()}`;
+  const { svg, bindFunctions } = await mermaid.render(id, source);
+  canvas.innerHTML = svg;
+  canvas.hidden = false;
+  $('.diagram-fallback', element).hidden = true;
+  $('.diagram-frame', element)?.classList.add('has-mermaid');
+  const svgElement = $('svg', canvas);
+  svgElement?.removeAttribute('width');
+  svgElement?.removeAttribute('height');
+  canvas.dataset.zoom = '1';
+  if (svgElement) requestAnimationFrame(() => applyDiagramZoom($('.diagram-frame', element), 1, true));
+  $$('a', canvas).forEach(link => { link.target = '_blank'; link.rel = 'noopener'; });
+  bindFunctions?.(canvas);
+}
+
+function applyDiagramZoom(frame, zoom, resetScroll = false) {
+  const canvas = $('.mermaid-canvas', frame);
+  const svg = $('svg', canvas);
+  if (!canvas || !svg) return;
+  const nextZoom = Math.max(.5, Math.min(3, zoom));
+  canvas.dataset.zoom = String(nextZoom);
+  svg.style.width = nextZoom === 1 ? '100%' : `${Math.round(canvas.clientWidth * nextZoom)}px`;
+  svg.style.height = 'auto';
+  svg.style.minWidth = '0';
+  if (resetScroll) canvas.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+  $$('.diagram-zoom', frame).forEach(button => {
+    if (button.dataset.diagramZoom === 'out') button.disabled = nextZoom <= .5;
+    if (button.dataset.diagramZoom === 'in') button.disabled = nextZoom >= 3;
+  });
+}
+
+function changeDiagramZoom(button) {
+  const frame = button.closest('.diagram-frame');
+  const canvas = $('.mermaid-canvas', frame);
+  if (!canvas || canvas.hidden) return;
+  const current = Number(canvas.dataset.zoom || 1);
+  const action = button.dataset.diagramZoom;
+  applyDiagramZoom(frame, action === 'fit' ? 1 : current + (action === 'in' ? .25 : -.25), action === 'fit');
+}
+
+function renderArchitectureUnavailable(element) {
+  const fallback = $('.diagram-fallback', element);
+  fallback.hidden = false;
+  fallback.innerHTML = `<div class="architecture-unavailable">${icon('i-diagram')}<strong>Full architecture not generated yet</strong><span>Open GitDiagram to generate the repository-specific map.</span><a href="${esc(element.dataset.gitdiagram)}" target="_blank" rel="noopener">Generate diagram ${icon('i-arrow')}</a></div>`;
+}
+
+function selectArchitectureEntries(tree, fullName, branch) {
+  const clean = tree.filter(item => item.path && !item.path.split('/').some(part => part.startsWith('.') && part !== '.github'));
+  const topDirectories = clean.filter(item => item.type === 'tree' && !item.path.includes('/')).slice(0, 6);
+  const childDirectories = topDirectories.flatMap(parent => clean.filter(item => item.type === 'tree' && item.path.startsWith(`${parent.path}/`) && item.path.split('/').length === 2).slice(0, 1));
+  const importantFiles = clean.filter(item => item.type === 'blob' && !item.path.includes('/') && /^(package\.json|pyproject\.toml|cargo\.toml|go\.mod|dockerfile|compose\.ya?ml|readme\.md)$/i.test(item.path)).slice(0, 3);
+  return [...topDirectories, ...childDirectories, ...importantFiles].slice(0, 12).map(item => {
+    const segments = item.path.split('/');
+    return {
+      name: segments.at(-1),
+      path: item.path,
+      parent: segments.length > 1 ? segments[0] : '',
+      type: item.type === 'tree' ? 'dir' : 'file',
+      html_url: `https://github.com/${fullName}/${item.type === 'tree' ? 'tree' : 'blob'}/${encodeURIComponent(branch)}/${item.path.split('/').map(encodeURIComponent).join('/')}`
+    };
+  });
+}
+
+function compileTreeMermaid(entries, repositoryName) {
+  const cleanLabel = value => String(value).replace(/"/g, '#quot;').replace(/[<>]/g, '');
+  const idByPath = new Map(entries.map((entry, index) => [entry.path, `tree_node_${index}`]));
+  const nodes = entries.map((entry, index) => `${idByPath.get(entry.path)}["${cleanLabel(entry.name)}<br/>${entry.type === 'dir' ? 'module' : 'project file'}"]`).join('\n');
+  const edges = entries.map(entry => {
+    const parentId = entry.parent ? idByPath.get(entry.parent) : '';
+    return `${parentId || 'repository_root'} -->|"${entry.type === 'dir' ? 'contains' : 'configures'}"| ${idByPath.get(entry.path)}`;
+  }).join('\n');
+  const links = entries.filter(entry => entry.html_url).map(entry => `click ${idByPath.get(entry.path)} "${entry.html_url}"`).join('\n');
+  return `flowchart TD\nrepository_root["${cleanLabel(repositoryName)}<br/>repository"]\n${nodes}\n${edges}\n${links}`;
+}
+
+async function loadArchitecturePreview(element) {
+  const fullName = element.dataset.architectureRepo;
+  if (architectureCache.has(fullName)) {
+    const cached = architectureCache.get(fullName);
+    await renderMermaidArchitecture(element, cached.source);
+    return;
+  }
+  try {
+    const source = await fetchGitDiagramGraph(fullName);
+    architectureCache.set(fullName, { kind: 'mermaid', source });
+    await renderMermaidArchitecture(element, source);
+    return;
+  } catch {}
+  try {
+    const branch = element.dataset.branch || 'main';
+    const response = await fetch(`https://api.github.com/repos/${fullName}/git/trees/${encodeURIComponent(branch)}?recursive=1`, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!response.ok) throw new Error('Repository structure unavailable');
+    const data = await response.json();
+    const entries = selectArchitectureEntries(data.tree || [], fullName, branch);
+    if (!entries.length) throw new Error('Repository structure unavailable');
+    const source = compileTreeMermaid(entries, fullName.split('/')[1]);
+    architectureCache.set(fullName, { kind: 'tree', source });
+    await renderMermaidArchitecture(element, source);
+  } catch {
+    renderArchitectureUnavailable(element);
+  }
+}
+
+async function loadStackPreview(element) {
+  const fullName = element.dataset.stackRepo;
+  const fallback = [element.dataset.primary || 'Mixed'];
+  if (stackCache.has(fullName)) { renderStack(element, stackCache.get(fullName)); return; }
+  try {
+    const response = await fetch(`https://api.github.com/repos/${fullName}/languages`, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!response.ok) throw new Error('Language data unavailable');
+    const data = await response.json();
+    const languages = Object.entries(data).sort((a, b) => b[1] - a[1]).map(([language]) => language);
+    const stack = languages.length ? languages : fallback;
+    stackCache.set(fullName, stack);
+    renderStack(element, stack);
+  } catch {
+    renderStack(element, fallback);
+  }
+}
+
+function hydrateReadmes() {
+  readmeObserver?.disconnect();
+  readmeObserver = new IntersectionObserver(entries => {
+    entries.filter(entry => entry.isIntersecting).forEach(entry => {
+      readmeObserver.unobserve(entry.target);
+      loadReadmePreview(entry.target);
+      const card = entry.target.closest('.repo-card');
+      const stack = $('.stack-panel', card);
+      const architecture = $('.diagram-preview', card);
+      if (stack) loadStackPreview(stack);
+      if (architecture) loadArchitecturePreview(architecture);
+    });
+  }, { root: feed, rootMargin: '320px 0px' });
+  $$('.readme-preview', feed).forEach(element => readmeObserver.observe(element));
+}
+
+function attachCardEvents() {
+  $$('.like-button', feed).forEach(btn => btn.addEventListener('click', () => toggleSet(btn, liked, 'repodive:liked', 'Starred for this session')));
+  $$('.save-button', feed).forEach(btn => btn.addEventListener('click', () => { toggleSet(btn, saved, 'repodive:saved', saved.has(btn.dataset.key) ? 'Saved to your list' : 'Removed from saved'); updateSavedCount(); if (state.view === 'saved') renderFeed(); }));
+  $$('.share-button', feed).forEach(btn => btn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(btn.dataset.url); showToast('Repository link copied'); } catch { showToast('Copy unavailable — open the repository instead'); } }));
+  $$('.comment-button', feed).forEach(btn => btn.addEventListener('click', () => openComments(btn.dataset.key)));
+  hydrateReadmes();
+  observeSeenRepos();
+}
+function toggleSet(btn, set, storageKey, message) { const key = btn.dataset.key; set.has(key) ? set.delete(key) : set.add(key); btn.classList.toggle('active', set.has(key)); persistSet(storageKey, set); showToast(message); }
+function updateSavedCount() { $('#savedCount').textContent = saved.size; }
+
+function observeSeenRepos() {
+  seenObserver?.disconnect();
+  if (state.view === 'saved') return;
+  seenObserver = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (!entry.isIntersecting || entry.intersectionRatio < .62) return;
+    const key = entry.target.dataset.repoKey;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    while (seen.size > 1500) seen.delete(seen.values().next().value);
+    persistSet('repodive:seen', seen);
+    $('#seenCount').textContent = `${seen.size} explored repos hidden on this device`;
+  }), { root: feed, threshold: [.62] });
+  $$('.repo-slide', feed).forEach(slide => seenObserver.observe(slide));
+}
+
+function daysAgo(date) { return Math.max(0, (Date.now() - new Date(date || 0).getTime()) / 86400000); }
+function hashText(value) { return [...value].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0); }
+function rankRepos(repos) {
+  return repos.map(repo => {
+    const stars = repo.stargazers_count || 0;
+    const fresh = Math.max(0, 1 - daysAgo(repo.pushed_at || repo.updated_at) / 365);
+    const hiddenGem = stars >= 20 && stars <= 5000 ? 1 : Math.max(0, 1 - Math.log10(Math.max(10, stars)) / 6);
+    const context = (repo.description ? .35 : 0) + Math.min((repo.topics || []).length, 6) * .06;
+    const variety = Math.abs(hashText(`${repo.full_name}:${state.cycle}`) % 1000) / 1000;
+    const modeScore = state.discovery === 'hidden' ? hiddenGem * 2.4 + fresh * .7 : state.discovery === 'jobs' ? fresh * 1.8 + Math.log10(stars + 1) / 4 : state.discovery === 'rising' ? fresh * 2.5 + hiddenGem * .4 : state.discovery === 'popular' ? Math.log10(stars + 1) / 3 : hiddenGem + fresh + variety;
+    return { repo, score: modeScore + context + variety * .35 };
+  }).sort((a, b) => b.score - a.score).map(item => item.repo);
+}
+
+function discoveryQuery() {
+  const balancedBands = ['stars:20..500', 'stars:500..5000', 'stars:5000..50000'];
+  if (state.discovery === 'hidden') return ['stars:20..3000'];
+  if (state.discovery === 'jobs') return [jobTopicQueries[state.cycle % jobTopicQueries.length], 'stars:>5'];
+  if (state.discovery === 'rising') {
+    const cutoff = new Date(Date.now() - 1000 * 60 * 60 * 24 * 180).toISOString().slice(0, 10);
+    return ['stars:10..10000', `pushed:>${cutoff}`];
+  }
+  if (state.discovery === 'popular') return ['stars:>5000'];
+  return [balancedBands[state.cycle % balancedBands.length]];
+}
+
+async function loadRepos({ append = false } = {}) {
+  if (state.loading) return;
+  state.loading = true;
+  const requestId = ++state.requestId;
+  showFeedStatus(append ? 'Finding more repositories…' : 'Tuning your feed…');
+  if (!append) {
+    state.page = 1;
+    state.cycle += 1;
+    delivered.clear();
+    state.repos = filterFallback();
+    renderFeed();
+  }
+  const q = [...discoveryQuery(), 'archived:false', 'fork:false', 'is:public'];
+  if (state.language !== 'All') q.push(`language:"${state.language}"`);
+  if (state.framework !== 'Any') q.push(frameworkQueries[state.framework]);
+  if (state.topic !== 'Any') q.push(topicQueries[state.topic]);
+  if (state.query) q.push(state.query);
+  const sort = state.view === 'trending' || state.discovery === 'rising' ? 'updated' : state.sort;
+  try {
+    const response = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(q.filter(Boolean).join(' '))}&sort=${sort}&order=desc&per_page=30&page=${state.page}`, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!response.ok) throw new Error(`GitHub API ${response.status}`);
+    const data = await response.json();
+    if (requestId !== state.requestId) return;
+    const candidates = data.items.filter(repo => !seen.has(repo.full_name) && !delivered.has(repo.full_name));
+    const modeMatches = state.discovery === 'hidden' ? candidates.filter(repo => !isJobsRepo(repo)) : state.discovery === 'jobs' ? candidates.filter(isJobsRepo) : candidates;
+    const unique = rankRepos(modeMatches);
+    unique.forEach(repo => delivered.add(repo.full_name));
+    state.repos = append ? dedupe([...state.repos, ...unique]) : unique;
+    if (!state.repos.length) showToast('No unseen matches here — broaden a filter');
+  } catch (error) {
+    if (requestId !== state.requestId) return;
+    if (!append) state.repos = filterFallback();
+    showToast('GitHub limit reached — showing curated repos');
+  } finally {
+    if (requestId === state.requestId) { state.loading = false; renderFeed(); hideFeedStatus(); }
+  }
+}
+function dedupe(repos) { return [...new Map(repos.map(r => [r.full_name, r])).values()]; }
+function filterFallback() {
+  const modeRepos = state.discovery === 'hidden' ? fallbackRepos.filter(repo => !isJobsRepo(repo)) : state.discovery === 'jobs' ? fallbackRepos.filter(isJobsRepo) : fallbackRepos;
+  const matches = modeRepos.filter(r => !seen.has(r.full_name) && (state.language === 'All' || r.language === state.language) && (state.framework === 'Any' || (r.topics || []).includes(state.framework.toLowerCase().replaceAll('.', '').replace(' ', ''))) && (state.topic === 'Any' || (r.topics || []).some(t => t.includes(state.topic.toLowerCase().replaceAll('& ', '').replace(' ', '-')))));
+  return matches.length ? matches : modeRepos.filter(r => !seen.has(r.full_name));
+}
+
+function setView(view) {
+  state.view = view;
+  $$('.nav-item, .mobile-nav [data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
+  const copy = view === 'saved' ? ['YOUR READING LIST', 'Projects worth returning to.'] : view === 'trending' ? ['MOVING FAST RIGHT NOW', 'See what builders are shipping.'] : ['FOR CURIOUS BUILDERS', 'Find code worth reading.'];
+  $('#sectionEyebrow').textContent = copy[0]; $('#sectionTitle').textContent = copy[1];
+  feed.scrollTop = 0;
+  view === 'saved' ? renderFeed() : loadRepos();
+}
+function setLanguage(language) { state.language = language; renderFilters(); bindFilterButtons(); feed.scrollTop = 0; loadRepos(); }
+function setFramework(framework) { state.framework = framework; renderFilters(); bindFilterButtons(); feed.scrollTop = 0; loadRepos(); }
+function setTopic(topic) { state.topic = topic; renderFilters(); bindFilterButtons(); feed.scrollTop = 0; loadRepos(); }
+function setDiscovery(discovery) { state.discovery = discovery; renderFilters(); bindFilterButtons(); feed.scrollTop = 0; loadRepos(); }
+function bindFilterButtons() {
+  $$('[data-language]').forEach(btn => btn.onclick = () => setLanguage(btn.dataset.language));
+  $$('[data-framework]').forEach(btn => btn.onclick = () => setFramework(btn.dataset.framework));
+  $$('[data-topic]').forEach(btn => btn.onclick = () => setTopic(btn.dataset.topic));
+  $$('[data-discovery]').forEach(btn => btn.onclick = () => setDiscovery(btn.dataset.discovery));
+}
+
+function openComments(key) { state.activeRepo = key; $('#commentsTitle').textContent = key; renderComments(); $('#commentsDialog').showModal(); }
+function renderComments() {
+  const list = comments[state.activeRepo] || [];
+  $('#commentsCount').textContent = list.length;
+  $('#commentsList').innerHTML = list.length ? list.map(c => `<div class="comment"><div class="comment-avatar">${esc(c.initials)}</div><div class="comment-body"><div class="comment-meta"><strong>${esc(c.author)}</strong><span>${esc(c.time)}</span></div><p>${esc(c.text)}</p><div class="comment-actions"><button>Reply</button><button>Helpful</button></div></div><button class="comment-like" aria-label="Mark comment as helpful">${icon('i-star')}</button></div>`).join('') : `<div class="comment-empty">${icon('i-message')}<strong>No comments yet</strong><span>Be the first builder to share context about this repository.</span></div>`;
+}
+function showToast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => el.classList.remove('show'), 2200); }
+function showFeedStatus(message) { feedStatus.textContent = message; feedStatus.classList.add('visible'); }
+function hideFeedStatus() { feedStatus.classList.remove('visible'); }
+function navigateFeed(direction) { const slides = $$('.repo-slide', feed); if (!slides.length) return; const top = feed.scrollTop + 10; let index = slides.findIndex(s => s.offsetTop >= top); if (index < 0) index = slides.length - 1; const target = slides[Math.max(0, Math.min(slides.length - 1, index + direction))]; target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+function openTechDetails(technology, repository) {
+  const display = technology.replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+  const key = Object.keys(techDescriptions).find(name => name.toLowerCase() === display.toLowerCase());
+  $('#techTitle').textContent = display;
+  $('#techDescription').textContent = key ? techDescriptions[key] : `${display} was detected from this repository's language data or GitHub topics. It describes a technology, tool, platform, or project concept used by the maintainers.`;
+  $('#techRepo').textContent = repository;
+  $('#techDialog').showModal();
+}
+function applyCardPanelState(card, nextPanel) {
+  card.classList.remove('panel-architecture', 'panel-stack', 'panel-readme');
+  card.classList.toggle('panel-focused', Boolean(nextPanel));
+  card.dataset.activePanel = nextPanel;
+  if (nextPanel) card.classList.add(`panel-${nextPanel}`);
+  $$('.deck-panel', card).forEach(panel => panel.classList.toggle('is-active', panel.dataset.panelName === nextPanel));
+  $$('[data-panel-handle]', card).forEach(handle => {
+    const selected = handle.dataset.panelHandle === nextPanel;
+    handle.classList.toggle('active', selected);
+    handle.setAttribute('aria-selected', String(selected));
+  });
+  const readme = $('.readme-preview', card);
+  const readmeExpanded = nextPanel === 'readme';
+  readme?.classList.toggle('expanded', readmeExpanded);
+  readme?.setAttribute('aria-expanded', String(readmeExpanded));
+  const expanded = nextPanel === 'architecture';
+  const button = $('.diagram-expand', card);
+  if (button) {
+    button.setAttribute('aria-expanded', String(expanded));
+    button.setAttribute('aria-label', expanded ? 'Collapse architecture diagram' : 'Expand architecture diagram');
+    button.innerHTML = icon(expanded ? 'i-collapse' : 'i-expand');
+  }
+  const frame = $('.diagram-frame', card);
+  if (frame) frame.setAttribute('aria-label', expanded ? 'Collapse repository architecture' : 'Expand repository architecture');
+}
+async function setCardPanel(card, panel) {
+  const activePanel = card.dataset.activePanel || '';
+  const nextPanel = activePanel === panel ? '' : panel;
+  if (card.classList.contains('is-panel-animating')) return;
+  if (activePanel) {
+    card.classList.add('is-panel-switching');
+    applyCardPanelState(card, nextPanel);
+    void card.offsetWidth;
+    requestAnimationFrame(() => requestAnimationFrame(() => card.classList.remove('is-panel-switching')));
+    return;
+  }
+  const selectedPanel = $(`.deck-panel[data-panel-name="${nextPanel}"]`, card);
+  const selectedBody = $('.deck-panel-body', selectedPanel);
+  const first = selectedPanel.getBoundingClientRect();
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion) {
+    applyCardPanelState(card, nextPanel);
+    return;
+  }
+  card.classList.add('is-panel-animating');
+  applyCardPanelState(card, nextPanel);
+  const last = selectedBody.getBoundingClientRect();
+  const deltaX = first.left - last.left;
+  const deltaY = first.top - last.top;
+  const scaleX = last.width ? first.width / last.width : 1;
+  const scaleY = last.height ? first.height / last.height : 1;
+  const animation = selectedBody.animate([
+    { transformOrigin: 'top left', transform: `translate(${deltaX}px, ${deltaY}px) scale(${scaleX}, ${scaleY})` },
+    { transformOrigin: 'top left', transform: 'translate(0, 0) scale(1, 1)' }
+  ], { duration: 360, easing: 'cubic-bezier(.2,.76,.2,1)', fill: 'forwards' });
+  await animation.finished.catch(() => {});
+  animation.cancel();
+  card.classList.remove('is-panel-animating');
+}
+function showArchitectureInsight(node) {
+  const frame = node.closest('.diagram-frame');
+  const insight = $('.architecture-insight', frame);
+  const name = node.dataset.nodeName;
+  const url = node.dataset.nodeUrl;
+  insight.hidden = false;
+  insight.innerHTML = `<button class="insight-close" type="button" aria-label="Close architecture detail">${icon('i-close')}</button><span>${node.dataset.nodeKind === 'file' ? 'FILE' : 'MODULE'}</span><strong>${esc(name)}</strong><p>${esc(architectureNodeDescription(name, node.dataset.nodeKind))}</p>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">View on GitHub ${icon('i-arrow')}</a>` : ''}`;
+}
+function toggleReadme(preview) {
+  const expanded = preview.classList.toggle('expanded');
+  preview.setAttribute('aria-expanded', String(expanded));
+  preview.setAttribute('aria-label', expanded ? 'Collapse repository documentation preview' : 'Expand repository documentation preview');
+  if (expanded) $('.readme-copy', preview).scrollTop = 0;
+}
+function resetFilters() {
+  state.language = 'All'; state.framework = 'Any'; state.topic = 'Any'; state.discovery = 'balanced'; state.sort = 'stars'; state.query = '';
+  $('#searchInput').value = ''; $('#mobileFilterSearch').value = '';
+  $$('[data-sort]').forEach(button => button.classList.toggle('active', button.dataset.sort === 'stars'));
+  renderFilters(); bindFilterButtons(); loadRepos();
+}
+
+$$('[data-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.view)));
+$('#resetFilters').addEventListener('click', resetFilters);
+$('#mobileResetFilters').addEventListener('click', resetFilters);
+$$('[data-sort]').forEach(btn => btn.addEventListener('click', () => { state.sort = btn.dataset.sort; $$('[data-sort]').forEach(x => x.classList.toggle('active', x.dataset.sort === state.sort)); loadRepos(); }));
+let searchTimer;
+function handleSearch(value, source) {
+  state.query = value.trim();
+  const other = source === 'desktop' ? $('#mobileFilterSearch') : $('#searchInput');
+  if (other.value !== value) other.value = value;
+  renderFeed();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { feed.scrollTop = 0; loadRepos(); }, 450);
+}
+$('#searchInput').addEventListener('input', e => handleSearch(e.target.value, 'desktop'));
+$('#mobileFilterSearch').addEventListener('input', e => handleSearch(e.target.value, 'mobile'));
+$('#mobileFilters').addEventListener('click', () => $('#filterDialog').showModal());
+$('#desktopFilters').addEventListener('click', () => $('#filterDialog').showModal());
+$('#closeFilters').addEventListener('click', () => $('#filterDialog').close());
+$('#applyFilters').addEventListener('click', () => $('#filterDialog').close());
+$('#filterDialog').addEventListener('click', e => { if (e.target === $('#filterDialog')) $('#filterDialog').close(); });
+$('#closeTech').addEventListener('click', () => $('#techDialog').close());
+$('#techDialog').addEventListener('click', e => { if (e.target === $('#techDialog')) $('#techDialog').close(); });
+$('#closeComments').addEventListener('click', () => $('#commentsDialog').close());
+$('#commentsDialog').addEventListener('click', e => { if (e.target === $('#commentsDialog')) $('#commentsDialog').close(); });
+$('#githubSignIn').addEventListener('click', () => showToast('GitHub OAuth app credentials are required to enable sign-in'));
+$('#commentForm').addEventListener('submit', e => { e.preventDefault(); const input = $('#commentInput'); const text = input.value.trim(); if (!text) return; (comments[state.activeRepo] ||= []).push({ author: 'You', initials: 'YOU', time: 'now', text }); localStorage.setItem('repodive:comments', JSON.stringify(comments)); input.value = ''; renderComments(); renderFeed(); showToast('Comment added locally'); });
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea') || $('#commentsDialog').open || $('#filterDialog').open || $('#techDialog').open) return;
+  const readme = e.target.closest?.('.readme-preview');
+  if (readme && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setCardPanel(readme.closest('.repo-card'), 'readme'); return; }
+  const diagram = e.target.closest?.('.diagram-frame');
+  if (diagram && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setCardPanel(diagram.closest('.repo-card'), 'architecture'); return; }
+  if (e.key === '/') { e.preventDefault(); $('#searchInput').focus(); }
+  if (e.key.toLowerCase() === 'j') navigateFeed(1);
+  if (e.key.toLowerCase() === 'k') navigateFeed(-1);
+});
+feed.addEventListener('click', e => {
+  if (e.target.closest('.diagram-external, .architecture-unavailable a')) return;
+  const zoomControl = e.target.closest('.diagram-zoom');
+  if (zoomControl) { changeDiagramZoom(zoomControl); return; }
+  const panelHandle = e.target.closest('[data-panel-handle]');
+  if (panelHandle) { setCardPanel(panelHandle.closest('.repo-card'), panelHandle.dataset.panelHandle); return; }
+  const readmeLink = e.target.closest('.readme-link');
+  if (readmeLink) {
+    const card = readmeLink.closest('.repo-card');
+    if (card.dataset.activePanel !== 'readme') { e.preventDefault(); setCardPanel(card, 'readme'); }
+    return;
+  }
+  const tech = e.target.closest('.tech-chip');
+  if (tech) { openTechDetails(tech.dataset.tech, tech.dataset.repo); return; }
+  const insightClose = e.target.closest('.insight-close');
+  if (insightClose) { insightClose.closest('.architecture-insight').hidden = true; return; }
+  const architectureNode = e.target.closest('.architecture-node');
+  if (architectureNode) { showArchitectureInsight(architectureNode); return; }
+  const mermaidLink = e.target.closest('.mermaid-canvas a');
+  if (mermaidLink) {
+    const card = mermaidLink.closest('.repo-card');
+    if (card.dataset.activePanel !== 'architecture') { e.preventDefault(); setCardPanel(card, 'architecture'); }
+    return;
+  }
+  const diagramControl = e.target.closest('.diagram-expand, .diagram-frame');
+  if (diagramControl) {
+    const card = diagramControl.closest('.repo-card');
+    if (card.dataset.activePanel !== 'architecture' || e.target.closest('.diagram-expand')) setCardPanel(card, 'architecture');
+    return;
+  }
+  const stack = e.target.closest('.stack-panel');
+  if (stack) { const card = stack.closest('.repo-card'); if (card.dataset.activePanel !== 'stack') setCardPanel(card, 'stack'); return; }
+  const preview = e.target.closest('.readme-preview');
+  if (preview) { const card = preview.closest('.repo-card'); if (card.dataset.activePanel !== 'readme') setCardPanel(card, 'readme'); }
+});
+feed.addEventListener('scroll', () => { if (state.view !== 'saved' && !state.loading && feed.scrollTop + feed.clientHeight > feed.scrollHeight - 500) { state.page += 1; loadRepos({ append: true }); } }, { passive: true });
+
+renderFilters(); bindFilterButtons(); updateSavedCount(); renderFeed(); loadRepos();
