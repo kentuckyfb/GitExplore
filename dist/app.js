@@ -275,18 +275,26 @@ async function translateReadme(element) {
   button.disabled = true;
   button.querySelector('span').textContent = 'Translating…';
   try {
-    if (!('Translator' in window)) throw new Error('Browser translation unavailable');
-    const translator = await Translator.create({ sourceLanguage: record.language, targetLanguage: 'en' });
-    const translated = [];
-    for (const paragraph of record.paragraphs) translated.push(await translator.translate(paragraph));
+    let translated;
+    if ('Translator' in window) {
+      try {
+        const translator = await Translator.create({ sourceLanguage: record.language, targetLanguage: 'en' });
+        translated = [];
+        for (const paragraph of record.paragraphs) translated.push(await translator.translate(paragraph));
+      } catch {}
+    }
+    if (!translated?.length) {
+      const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paragraphs: record.paragraphs, sourceLanguage: record.language }) });
+      if (!response.ok) throw new Error('Translation service unavailable');
+      translated = (await response.json()).paragraphs;
+    }
+    if (!Array.isArray(translated) || translated.length !== record.paragraphs.length) throw new Error('Invalid translation result');
     renderReadmeParagraphs(element, translated);
     record.translated = true;
     button.querySelector('span').textContent = 'Show original';
   } catch {
-    const repositoryUrl = `https://github.com/${element.dataset.repo}#readme`;
-    window.open(`https://translate.google.com/translate?sl=auto&tl=en&u=${encodeURIComponent(repositoryUrl)}`, '_blank', 'noopener');
     button.querySelector('span').textContent = 'Translate';
-    showToast('Opened the translated README in a new tab');
+    showToast('Translation is temporarily unavailable');
   } finally {
     button.disabled = false;
   }

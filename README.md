@@ -10,7 +10,7 @@ A scroll-first interface for discovering public GitHub repositories, hidden gems
 - Keyword, language, framework, project-type, and freshness filters
 - Full-screen mobile feed with seen-repository deduplication
 - README, technology-stack, and repository architecture panels
-- README language detection with in-browser translation where supported
+- README language detection with same-page translation inside the expanded panel
 - Installable full-screen PWA experience with offline app-shell caching
 - Real GitHub issue and pull-request comments
 - Secure GitHub OAuth sign-in and issue replies when server credentials are configured

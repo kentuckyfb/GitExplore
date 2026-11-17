@@ -125,6 +125,31 @@ async function handleApi(request, response, url) {
     sendJson(response, 200, { ok: true });
     return true;
   }
+  if (url.pathname === '/api/translate' && request.method === 'POST') {
+    if (!sameOrigin(request)) { sendJson(response, 403, { error: 'Invalid origin' }); return true; }
+    const input = await readJson(request);
+    const paragraphs = Array.isArray(input.paragraphs) ? input.paragraphs.map(value => String(value).trim()).filter(Boolean) : [];
+    const requestedLanguage = String(input.sourceLanguage || 'auto').toLowerCase();
+    const sourceLanguage = /^[a-z]{2,3}(?:-[a-z]{2})?$/.test(requestedLanguage) ? requestedLanguage : 'auto';
+    if (!paragraphs.length || paragraphs.length > 6 || paragraphs.some(text => text.length > 2400) || paragraphs.join('').length > 9000) { sendJson(response, 400, { error: 'Invalid translation request.' }); return true; }
+    try {
+      const translated = await Promise.all(paragraphs.map(async text => {
+        const endpoint = new URL('https://translate.googleapis.com/translate_a/single');
+        endpoint.searchParams.set('client', 'gtx');
+        endpoint.searchParams.set('sl', sourceLanguage);
+        endpoint.searchParams.set('tl', 'en');
+        endpoint.searchParams.set('dt', 't');
+        endpoint.searchParams.set('q', text);
+        const upstream = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
+        if (!upstream.ok) throw new Error(`Translation upstream ${upstream.status}`);
+        const payload = await upstream.json();
+        return Array.isArray(payload?.[0]) ? payload[0].map(segment => segment?.[0] || '').join('') : '';
+      }));
+      if (translated.some(text => !text)) throw new Error('Empty translation');
+      sendJson(response, 200, { paragraphs: translated });
+    } catch { sendJson(response, 502, { error: 'Translation service unavailable.' }); }
+    return true;
+  }
   if (url.pathname === '/api/github/comments' && request.method === 'POST') {
     if (!sameOrigin(request)) { sendJson(response, 403, { error: 'Invalid origin' }); return true; }
     const session = currentSession(request);
