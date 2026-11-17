@@ -297,8 +297,8 @@ kbd { font: 600 9px ui-monospace, SFMono-Regular, monospace; border: 1px solid v
   .repo-owner img { width: 32px; height: 32px; border-radius: 9px; }
   .repo-name { grid-area: name; align-self: center; font-size: clamp(35px, 3.4vw, 47px); line-height: .98; }
   .repo-description { display: -webkit-box; grid-area: description; align-self: center; max-width: none; margin: 0; overflow: hidden; color: #515a51; font-size: 13px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-  .detail-deck { display: grid; grid-template-columns: minmax(260px, .78fr) minmax(0, 1.22fr); grid-template-rows: minmax(148px, auto) 30px; gap: 12px 16px; padding: 16px 18px 18px; }
-  .stack-panel { grid-column: 1; grid-row: 1; min-height: 148px; margin: 0; padding: 14px; border-radius: 14px; }
+  .detail-deck { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 190px 30px; gap: 12px 16px; padding: 16px 18px 18px; }
+  .stack-panel { grid-column: 1; grid-row: 1; width: 100%; height: 190px; min-height: 0; margin: 0; padding: 14px; overflow-y: auto; border-radius: 14px; scrollbar-width: thin; }
   .stack-heading { margin-bottom: 12px; }
   .stack-heading strong { font-size: 12px; }
   .stack-items, .tools-row > div { gap: 7px; }
@@ -306,7 +306,7 @@ kbd { font: 600 9px ui-monospace, SFMono-Regular, monospace; border: 1px solid v
   .tools-row { grid-template-columns: 60px minmax(0, 1fr); margin-top: 11px; }
   .metrics-row { grid-column: 1; grid-row: 2; align-self: center; margin: 0; padding: 0 4px; flex-wrap: nowrap; gap: 14px; }
   .metric { font-size: 9px; }
-  .readme-preview { grid-column: 2; grid-row: 1 / span 2; height: 190px; margin: 0; padding: 20px 54px 24px 20px; border: 1px solid #eef0eb; border-radius: 14px; }
+  .readme-preview { grid-column: 2; grid-row: 1; width: 100%; height: 190px; margin: 0; padding: 20px 54px 24px 20px; border: 1px solid #eef0eb; border-radius: 14px; }
   .readme-preview.expanded { height: 190px; }
   .readme-copy p { font-size: 11px; line-height: 1.6; }
   .readme-copy p:first-child { font-size: 12px; }
@@ -368,9 +368,10 @@ kbd { font: 600 9px ui-monospace, SFMono-Regular, monospace; border: 1px solid v
 }
 
 @media (min-width: 901px) {
-  .detail-deck { grid-template-columns: minmax(0, .76fr) minmax(0, 1.04fr) minmax(0, 1.04fr); }
+  .detail-deck { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: 210px 30px; }
+  .stack-panel, .readme-preview { height: 210px; }
   .readme-preview { grid-column: 2; }
-  .diagram-preview { display: flex; grid-column: 3; grid-row: 1 / span 2; height: 190px; padding: 12px; flex-direction: column; overflow: hidden; border-radius: 14px; background: #1d241f; color: #fff; }
+  .diagram-preview { display: flex; grid-column: 3; grid-row: 1; width: 100%; height: 210px; padding: 12px; flex-direction: column; overflow: hidden; border-radius: 14px; background: #1d241f; color: #fff; }
   .diagram-preview-head { display: flex; min-height: 26px; align-items: center; margin-bottom: 8px; }
   .diagram-preview-head strong { display: flex; align-items: center; gap: 6px; font-size: 9px; }
   .diagram-preview-head svg { width: 13px; height: 13px; }

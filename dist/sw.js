@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gitexplore-shell-v9';
+const CACHE_NAME = 'gitexplore-shell-v10';
 const APP_SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
