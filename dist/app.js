@@ -922,9 +922,14 @@ async function installApplication() {
 function openTechDetails(technology, repository) {
   const display = technology.replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
   const key = Object.keys(techDescriptions).find(name => name.toLowerCase() === display.toLowerCase());
+  const isLanguage = Object.keys(languageColors).some(name => name.toLowerCase() === display.toLowerCase());
+  const isMethod = /REST|HTTP|GraphQL|Realtime|gRPC|OAuth|Event|Microservices|Monorepo|MVC|architecture|Containers|Orchestration|testing|CI \/ CD|Persistent data/i.test(display);
+  const colorKey = Object.keys(languageColors).find(name => name.toLowerCase() === display.toLowerCase());
   $('#techTitle').textContent = display;
+  $('#techType').textContent = isLanguage ? 'Programming language' : isMethod ? 'Method or protocol' : 'Tool, platform or topic';
   $('#techDescription').textContent = key ? techDescriptions[key] : `${display} was detected from this repository's language data or GitHub topics. It describes a technology, tool, platform, or project concept used by the maintainers.`;
   $('#techRepo').textContent = repository;
+  $('#techDialog').style.setProperty('--tech-color', colorKey ? languageColors[colorKey] : '#7f8a80');
   $('#techDialog').showModal();
 }
 function applyCardPanelState(card, nextPanel) {

@@ -99,11 +99,15 @@
   </dialog>
 
   <dialog class="tech-dialog" id="techDialog">
-    <div class="tech-dialog-head"><div class="tech-dialog-icon"><svg><use href="#i-issue"/></svg></div><button class="icon-button" id="closeTech" aria-label="Close technology details"><svg><use href="#i-close"/></svg></button></div>
-    <p class="eyebrow">DETECTED TECHNOLOGY</p>
-    <h2 id="techTitle">Technology</h2>
-    <p id="techDescription"></p>
-    <div class="tech-context"><span>Found in</span><strong id="techRepo"></strong></div>
+    <div class="sheet-handle tech-sheet-handle" aria-hidden="true"></div>
+    <div class="tech-dialog-head">
+      <div class="tech-dialog-heading"><div class="tech-dialog-icon"><span></span></div><div><p class="eyebrow" id="techType">Technology</p><h2 id="techTitle">Technology</h2></div></div>
+      <button class="icon-button" id="closeTech" aria-label="Close technology details"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="tech-dialog-body">
+      <p id="techDescription"></p>
+      <div class="tech-context"><span>Detected in repository</span><strong id="techRepo"></strong></div>
+    </div>
   </dialog>
 
   <dialog class="comments-dialog" id="commentsDialog">
