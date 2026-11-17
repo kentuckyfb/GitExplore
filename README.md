@@ -35,4 +35,15 @@ Open `http://127.0.0.1:4173`.
 
 OAuth tokens are encrypted into HttpOnly, SameSite cookies and never exposed to the browser bundle. For production, set `APP_ORIGIN` to the deployed HTTPS origin and update the OAuth App callback URL to match.
 
+### Vercel production setup
+
+The repository includes Vercel serverless routes for OAuth, GitHub replies, and same-page README translation. Set these variables for Production, Preview, and Development:
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `COOKIE_SECRET` (at least 24 random characters)
+- `APP_ORIGIN=https://gitexplore-dist.vercel.app`
+
+Use `https://gitexplore-dist.vercel.app/api/auth/github/callback` as the GitHub OAuth App authorization callback URL. Keep the Vercel project root at the repository root; `vercel.json` serves the static app from `dist/` while preserving `/api/*` functions.
+
 Public discovery and GitHub discussion reading work without authentication. Saved repositories and likes remain browser-local.

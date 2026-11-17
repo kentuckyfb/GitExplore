@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/", "destination": "/dist/index.html" },
+    { "source": "/app.js", "destination": "/dist/app.js" },
+    { "source": "/styles.css", "destination": "/dist/styles.css" },
+    { "source": "/sw.js", "destination": "/dist/sw.js" },
+    { "source": "/manifest.webmanifest", "destination": "/dist/manifest.webmanifest" },
+    { "source": "/icon.svg", "destination": "/dist/icon.svg" }
+  ],
+  "functions": {
+    "api/[...route].js": { "maxDuration": 10 }
+  }
+}
