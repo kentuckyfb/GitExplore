@@ -1,21 +1,161 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
 
+async function loadLocalEnv() {
+  try {
+    const source = await readFile(new URL('./.env', import.meta.url), 'utf8');
+    for (const line of source.split(/\r?\n/)) {
+      const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+      if (match && !(match[1] in process.env)) process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, '');
+    }
+  } catch {}
+}
+
+await loadLocalEnv();
+
 const root = new URL('./dist/', import.meta.url).pathname.replace(/^\/(.:)/, '$1');
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+const port = Number(process.env.PORT || 4173);
+const appOrigin = process.env.APP_ORIGIN || `http://127.0.0.1:${port}`;
+const githubClientId = process.env.GITHUB_CLIENT_ID || '';
+const githubClientSecret = process.env.GITHUB_CLIENT_SECRET || '';
+const cookieSecret = process.env.COOKIE_SECRET || '';
+const oauthConfigured = Boolean(githubClientId && githubClientSecret && cookieSecret.length >= 24);
+const encryptionKey = createHash('sha256').update(cookieSecret || 'gitexplore-development-only').digest();
+const secureCookie = appOrigin.startsWith('https://') ? '; Secure' : '';
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml; charset=utf-8' };
+
+function encodeSession(value) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', encryptionKey, iv);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64url');
+}
+
+function decodeSession(value) {
+  try {
+    const payload = Buffer.from(value, 'base64url');
+    const iv = payload.subarray(0, 12);
+    const tag = payload.subarray(12, 28);
+    const decipher = createDecipheriv('aes-256-gcm', encryptionKey, iv);
+    decipher.setAuthTag(tag);
+    return JSON.parse(Buffer.concat([decipher.update(payload.subarray(28)), decipher.final()]).toString('utf8'));
+  } catch { return null; }
+}
+
+function cookies(request) {
+  return Object.fromEntries((request.headers.cookie || '').split(';').map(value => value.trim()).filter(Boolean).map(value => {
+    const index = value.indexOf('=');
+    return [decodeURIComponent(value.slice(0, index)), decodeURIComponent(value.slice(index + 1))];
+  }));
+}
+
+function setCookie(response, name, value, maxAge) {
+  response.setHeader('Set-Cookie', `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie}`);
+}
+
+function sendJson(response, status, body) {
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  response.end(JSON.stringify(body));
+}
+
+async function readJson(request) {
+  let body = '';
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > 12000) throw new Error('Request too large');
+  }
+  return JSON.parse(body || '{}');
+}
+
+function safeReturnTo(value) { return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/'; }
+function sameOrigin(request) { return !request.headers.origin || request.headers.origin === appOrigin; }
+function currentSession(request) {
+  const session = decodeSession(cookies(request).gitexplore_session || '');
+  return session?.token && session?.user ? session : null;
+}
+
+async function handleApi(request, response, url) {
+  if (url.pathname === '/api/auth/config' && request.method === 'GET') {
+    sendJson(response, 200, { configured: oauthConfigured, callbackUrl: `${appOrigin}/api/auth/github/callback` });
+    return true;
+  }
+  if (url.pathname === '/api/auth/github' && request.method === 'GET') {
+    if (!oauthConfigured) { sendJson(response, 503, { error: 'GitHub OAuth is not configured. See .env.example.' }); return true; }
+    const state = randomBytes(24).toString('base64url');
+    const returnTo = safeReturnTo(url.searchParams.get('returnTo'));
+    setCookie(response, 'gitexplore_oauth', encodeSession({ state, returnTo, createdAt: Date.now() }), 600);
+    const authorize = new URL('https://github.com/login/oauth/authorize');
+    authorize.searchParams.set('client_id', githubClientId);
+    authorize.searchParams.set('redirect_uri', `${appOrigin}/api/auth/github/callback`);
+    authorize.searchParams.set('scope', 'read:user public_repo');
+    authorize.searchParams.set('state', state);
+    response.writeHead(302, { Location: authorize.toString() });
+    response.end();
+    return true;
+  }
+  if (url.pathname === '/api/auth/github/callback' && request.method === 'GET') {
+    const pending = decodeSession(cookies(request).gitexplore_oauth || '');
+    const returnedState = url.searchParams.get('state') || '';
+    const expectedState = pending?.state || '';
+    const validState = returnedState.length === expectedState.length && returnedState.length > 10 && timingSafeEqual(Buffer.from(returnedState), Buffer.from(expectedState));
+    if (!validState || Date.now() - Number(pending?.createdAt || 0) > 600000) { sendJson(response, 400, { error: 'Invalid or expired OAuth state.' }); return true; }
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: githubClientId, client_secret: githubClientSecret, code: url.searchParams.get('code'), redirect_uri: `${appOrigin}/api/auth/github/callback` }) });
+    const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) { sendJson(response, 401, { error: 'GitHub did not return an access token.' }); return true; }
+    const userResponse = await fetch('https://api.github.com/user', { headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${tokenData.access_token}`, 'User-Agent': 'GitExplore' } });
+    const user = await userResponse.json();
+    if (!userResponse.ok) { sendJson(response, 401, { error: 'Could not load the GitHub user.' }); return true; }
+    const sessionCookie = `gitexplore_session=${encodeURIComponent(encodeSession({ token: tokenData.access_token, user: { id: user.id, login: user.login, avatar_url: user.avatar_url, html_url: user.html_url } }))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secureCookie}`;
+    response.setHeader('Set-Cookie', [sessionCookie, `gitexplore_oauth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie}`]);
+    response.writeHead(302, { Location: safeReturnTo(pending.returnTo) });
+    response.end();
+    return true;
+  }
+  if (url.pathname === '/api/me' && request.method === 'GET') {
+    const session = currentSession(request);
+    if (!session) { sendJson(response, 401, { error: 'Not signed in' }); return true; }
+    sendJson(response, 200, session.user);
+    return true;
+  }
+  if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
+    if (!sameOrigin(request)) { sendJson(response, 403, { error: 'Invalid origin' }); return true; }
+    setCookie(response, 'gitexplore_session', '', 0);
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+  if (url.pathname === '/api/github/comments' && request.method === 'POST') {
+    if (!sameOrigin(request)) { sendJson(response, 403, { error: 'Invalid origin' }); return true; }
+    const session = currentSession(request);
+    if (!session) { sendJson(response, 401, { error: 'Sign in with GitHub first.' }); return true; }
+    const input = await readJson(request);
+    const repository = String(input.repository || '');
+    const issueNumber = Number(input.issueNumber);
+    const body = String(input.body || '').trim();
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || !Number.isInteger(issueNumber) || issueNumber < 1 || body.length < 1 || body.length > 1000) { sendJson(response, 400, { error: 'Invalid comment request.' }); return true; }
+    const githubResponse = await fetch(`https://api.github.com/repos/${repository}/issues/${issueNumber}/comments`, { method: 'POST', headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json', 'User-Agent': 'GitExplore' }, body: JSON.stringify({ body }) });
+    const result = await githubResponse.json();
+    if (!githubResponse.ok) { sendJson(response, githubResponse.status, { error: result.message || 'GitHub rejected the comment.' }); return true; }
+    sendJson(response, 201, { id: result.id, html_url: result.html_url });
+    return true;
+  }
+  return false;
+}
 
 createServer(async (request, response) => {
   try {
-    const requested = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
+    const url = new URL(request.url, appOrigin);
+    if (url.pathname.startsWith('/api/') && await handleApi(request, response, url)) return;
+    const requested = decodeURIComponent(url.pathname);
     const relative = requested === '/' ? 'index.html' : requested.replace(/^\//, '');
     const path = normalize(join(root, relative));
     if (!path.startsWith(normalize(root))) throw new Error('Invalid path');
     const body = await readFile(path);
-    response.writeHead(200, { 'Content-Type': types[extname(path)] || 'application/octet-stream' });
+    response.writeHead(200, { 'Content-Type': types[extname(path)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
     response.end(body);
   } catch {
-    response.writeHead(404, { 'Content-Type': 'text/plain' });
+    response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('Not found');
   }
-}).listen(4173, '127.0.0.1', () => console.log('RepoDive preview: http://127.0.0.1:4173'));
+}).listen(port, '127.0.0.1', () => console.log(`GitExplore: ${appOrigin}`));

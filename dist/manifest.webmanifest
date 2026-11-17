@@ -1,0 +1,16 @@
+{
+  "name": "GitExplore",
+  "short_name": "GitExplore",
+  "description": "A scroll-first way to discover useful public GitHub repositories.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "background_color": "#f4f5ef",
+  "theme_color": "#171c18",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

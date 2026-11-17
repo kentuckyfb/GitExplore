@@ -47,10 +47,13 @@ const saved = new Set(JSON.parse(localStorage.getItem('repodive:saved') || '[]')
 const liked = new Set(JSON.parse(localStorage.getItem('repodive:liked') || '[]'));
 const seen = new Set(JSON.parse(localStorage.getItem('repodive:seen') || '[]'));
 const delivered = new Set();
-const comments = JSON.parse(localStorage.getItem('repodive:comments') || '{}');
 const readmeCache = new Map();
+const readmeOriginals = new WeakMap();
 const stackCache = new Map();
 const architectureCache = new Map();
+const githubDiscussionCache = new Map();
+let githubUser = null;
+let installPromptEvent = null;
 let readmeObserver;
 let seenObserver;
 
@@ -108,7 +111,7 @@ function renderFeed() {
 function repoCard(repo, index) {
   const key = repoKey(repo);
   const tags = (repo.topics || []).slice(0, 5);
-  const commentCount = (comments[key] || []).length;
+  const commentCount = githubDiscussionCache.get(key)?.comments?.length || 0;
   const archUrl = `https://gitdiagram.com/${encodeURIComponent(repo.owner.login)}/${encodeURIComponent(repo.name)}`;
   const primaryLanguage = repo.language || 'Mixed';
   return `<article class="repo-slide" data-repo-key="${esc(key)}">
@@ -125,11 +128,12 @@ function repoCard(repo, index) {
           <p class="repo-description">${esc(repo.description || 'A public repository waiting to be explored.')}</p>
         </div>
         <div class="detail-deck">
-          <section class="stack-panel deck-panel" data-panel-name="stack" data-stack-repo="${esc(repo.full_name)}" data-primary="${esc(primaryLanguage)}">
+          <section class="stack-panel deck-panel" data-panel-name="stack" data-stack-repo="${esc(repo.full_name)}" data-primary="${esc(primaryLanguage)}" data-description="${esc(repo.description || '')}" data-topics="${esc(tags.join(','))}">
             <div class="stack-heading deck-panel-handle" data-panel-handle="stack"><strong>Tech stack</strong></div>
             <div class="stack-panel-body deck-panel-body">
             <div class="stack-items"><button class="stack-chip tech-chip" data-tech="${esc(primaryLanguage)}" data-repo="${esc(repo.full_name)}"><i style="--stack-color:${languageColors[primaryLanguage] || '#8a8f87'}"></i>${esc(primaryLanguage)}</button></div>
             ${tags.length ? `<div class="tools-row"><span>Also used</span><div>${tags.map(t => `<button class="tool-chip tech-chip" data-tech="${esc(t)}" data-repo="${esc(repo.full_name)}">${esc(t)}</button>`).join('')}</div></div>` : ''}
+            <div class="stack-analysis" aria-live="polite"><div class="stack-explainer"><span>How it works</span><p>Analyzing the repository structure…</p></div><div class="stack-signals"><span>Methods &amp; protocols</span><div></div></div></div>
             </div>
           </section>
           <div class="metrics-row">
@@ -143,6 +147,7 @@ function repoCard(repo, index) {
           <span class="readme-state sr-only">Loading repository documentation</span>
           <div class="readme-copy"><p>${esc(repo.description || 'Open the repository to read its documentation.')}</p></div>
           <span class="readme-ellipsis" aria-hidden="true">…</span>
+          <button class="readme-translate" type="button" hidden>${icon('i-translate')}<span>Translate</span></button>
           <a class="readme-link" href="${esc(repo.html_url)}#readme" target="_blank" rel="noopener" aria-label="Open full repository documentation" title="Open full repository documentation">${icon('i-arrow')}</a>
           </div>
         </section>
@@ -209,6 +214,84 @@ function readmeExcerpt(markdown) {
   return paragraphs.slice(0, 5);
 }
 
+function heuristicLanguage(text) {
+  if (/[぀-ヿ]/.test(text)) return 'ja';
+  if (/[가-힯]/.test(text)) return 'ko';
+  if (/[一-鿿]/.test(text)) return 'zh';
+  if (/[Ѐ-ӿ]/.test(text)) return 'ru';
+  if (/[؀-ۿ]/.test(text)) return 'ar';
+  if (/[ऀ-ॿ]/.test(text)) return 'hi';
+  const samples = [
+    ['es', /\b(el|la|los|las|para|con|este|esta|proyecto|instalaci[oó]n|c[oó]digo)\b/gi],
+    ['fr', /\b(le|la|les|des|pour|avec|projet|installation|utilisation|d[eé]marrer)\b/gi],
+    ['pt', /\b(o|os|uma|para|com|projeto|instala[cç][aã]o|utiliza[cç][aã]o|c[oó]digo)\b/gi],
+    ['de', /\b(der|die|das|und|mit|f[uü]r|projekt|installation|verwendung|beispiel)\b/gi],
+    ['it', /\b(il|gli|una|per|con|progetto|installazione|utilizzo|codice|esempio)\b/gi]
+  ];
+  const detected = samples.map(([language, pattern]) => [language, (text.match(pattern) || []).length]).sort((a, b) => b[1] - a[1])[0];
+  if (detected?.[1] >= 4) return detected[0];
+  return 'en';
+}
+
+async function detectReadmeLanguage(text) {
+  try {
+    if ('LanguageDetector' in window) {
+      const detector = await LanguageDetector.create();
+      const result = await detector.detect(text.slice(0, 3500));
+      if (result?.[0]?.detectedLanguage) return result[0].detectedLanguage;
+    }
+  } catch {}
+  return heuristicLanguage(text);
+}
+
+function renderReadmeParagraphs(element, paragraphs) {
+  $('.readme-copy', element).innerHTML = paragraphs.map(text => `<p>${esc(text)}</p>`).join('');
+}
+
+async function prepareReadme(element, paragraphs) {
+  renderReadmeParagraphs(element, paragraphs);
+  const stack = $('.stack-panel', element.closest('.repo-card'));
+  const knownLanguages = stack && stackCache.get(stack.dataset.stackRepo);
+  if (stack && knownLanguages) renderStack(stack, knownLanguages);
+  const language = await detectReadmeLanguage(paragraphs.join(' '));
+  readmeOriginals.set(element, { paragraphs, language, translated: false });
+  const button = $('.readme-translate', element);
+  if (button && language && !language.toLowerCase().startsWith('en')) {
+    button.hidden = false;
+    button.dataset.language = language;
+  }
+}
+
+async function translateReadme(element) {
+  const record = readmeOriginals.get(element);
+  const button = $('.readme-translate', element);
+  if (!record || !button) return;
+  if (record.translated) {
+    renderReadmeParagraphs(element, record.paragraphs);
+    record.translated = false;
+    button.querySelector('span').textContent = 'Translate';
+    return;
+  }
+  button.disabled = true;
+  button.querySelector('span').textContent = 'Translating…';
+  try {
+    if (!('Translator' in window)) throw new Error('Browser translation unavailable');
+    const translator = await Translator.create({ sourceLanguage: record.language, targetLanguage: 'en' });
+    const translated = [];
+    for (const paragraph of record.paragraphs) translated.push(await translator.translate(paragraph));
+    renderReadmeParagraphs(element, translated);
+    record.translated = true;
+    button.querySelector('span').textContent = 'Show original';
+  } catch {
+    const repositoryUrl = `https://github.com/${element.dataset.repo}#readme`;
+    window.open(`https://translate.google.com/translate?sl=auto&tl=en&u=${encodeURIComponent(repositoryUrl)}`, '_blank', 'noopener');
+    button.querySelector('span').textContent = 'Translate';
+    showToast('Opened the translated README in a new tab');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function loadReadmePreview(element) {
   const fullName = element.dataset.repo;
   const branch = element.dataset.branch || 'main';
@@ -216,7 +299,7 @@ async function loadReadmePreview(element) {
   const status = $('.readme-state', element);
   if (readmeCache.has(fullName)) {
     const paragraphs = readmeCache.get(fullName);
-    copy.innerHTML = paragraphs.map(text => `<p>${esc(text)}</p>`).join('');
+    await prepareReadme(element, paragraphs);
     status.textContent = 'README preview';
     return;
   }
@@ -235,7 +318,7 @@ async function loadReadmePreview(element) {
     const paragraphs = readmeExcerpt(markdown);
     if (!paragraphs.length) throw new Error('No readable README excerpt');
     readmeCache.set(fullName, paragraphs);
-    copy.innerHTML = paragraphs.map(text => `<p>${esc(text)}</p>`).join('');
+    await prepareReadme(element, paragraphs);
     status.textContent = 'README preview';
   } catch {
     status.textContent = 'Description preview';
@@ -245,6 +328,37 @@ async function loadReadmePreview(element) {
 function renderStack(element, languages) {
   const items = $('.stack-items', element);
   items.innerHTML = languages.slice(0, 4).map(language => `<button class="stack-chip tech-chip" data-tech="${esc(language)}" data-repo="${esc(element.dataset.stackRepo)}"><i style="--stack-color:${languageColors[language] || '#8a8f87'}"></i>${esc(language)}</button>`).join('');
+  const profile = inferStackProfile(element, languages);
+  $('.stack-explainer p', element).textContent = profile.summary;
+  $('.stack-signals > div', element).innerHTML = profile.signals.map(signal => `<button class="analysis-chip tech-chip" data-tech="${esc(signal)}" data-repo="${esc(element.dataset.stackRepo)}">${esc(signal)}</button>`).join('');
+}
+
+function inferStackProfile(element, languages) {
+  const readme = (readmeCache.get(element.dataset.stackRepo) || []).join(' ');
+  const source = `${element.dataset.description || ''} ${element.dataset.topics || ''} ${readme}`.toLowerCase();
+  const rules = [
+    [/\b(rest|restful|openapi|http api)\b/, 'REST / HTTP'],
+    [/\bgraphql\b/, 'GraphQL'],
+    [/\b(websocket|real[ -]?time)\b/, 'Realtime'],
+    [/\bgrpc\b/, 'gRPC'],
+    [/\b(oauth|authentication|authorization|auth)\b/, 'Auth / OAuth'],
+    [/\b(event[ -]?driven|kafka|rabbitmq|message queue)\b/, 'Event-driven'],
+    [/\b(microservices?)\b/, 'Microservices'],
+    [/\b(monorepo|workspace)\b/, 'Monorepo'],
+    [/\b(mvc|model view controller)\b/, 'MVC'],
+    [/\b(plugin|extension)\b/, 'Plugin architecture'],
+    [/\b(docker|container)\b/, 'Containers'],
+    [/\b(kubernetes|k8s)\b/, 'Orchestration'],
+    [/\b(test|tests|testing|tdd)\b/, 'Automated testing'],
+    [/\b(ci\/cd|continuous integration|github actions)\b/, 'CI / CD'],
+    [/\b(postgres|mysql|sqlite|database|sql)\b/, 'Persistent data']
+  ];
+  const signals = rules.filter(([pattern]) => pattern.test(source)).map(([, label]) => label).slice(0, 8);
+  if (!signals.length) signals.push('Open-source workflow', 'Repository conventions');
+  const primary = languages[0] || element.dataset.primary || 'mixed-language';
+  const kind = /\b(cli|command line)\b/.test(source) ? 'command-line tool' : /\b(mobile|android|ios)\b/.test(source) ? 'mobile application' : /\b(ai|machine learning|llm)\b/.test(source) ? 'AI-focused project' : /\b(api|backend|server)\b/.test(source) ? 'backend service' : /\b(frontend|react|vue|svelte|web app)\b/.test(source) ? 'web interface' : /\b(library|framework|sdk)\b/.test(source) ? 'library or framework' : 'software project';
+  const connection = signals.includes('REST / HTTP') ? 'Components communicate over HTTP APIs.' : signals.includes('Realtime') ? 'Its components exchange updates in real time.' : signals.includes('Event-driven') ? 'Work moves through events and background processing.' : 'The repository is organized around its main application modules.';
+  return { summary: `Primarily a ${primary} ${kind}. ${connection} Detected labels are inferred from its languages, topics, and README.`, signals };
 }
 
 function architectureNodeDescription(name, type) {
@@ -437,7 +551,7 @@ function hydrateReadmes() {
 
 function attachCardEvents() {
   $$('.like-button', feed).forEach(btn => btn.addEventListener('click', () => toggleSet(btn, liked, 'repodive:liked', 'Starred for this session')));
-  $$('.save-button', feed).forEach(btn => btn.addEventListener('click', () => { toggleSet(btn, saved, 'repodive:saved', saved.has(btn.dataset.key) ? 'Saved to your list' : 'Removed from saved'); updateSavedCount(); if (state.view === 'saved') renderFeed(); }));
+  $$('.save-button', feed).forEach(btn => btn.addEventListener('click', () => { toggleSet(btn, saved, 'repodive:saved', saved.has(btn.dataset.key) ? 'Removed from saved' : 'Saved to your list'); updateSavedCount(); if (state.view === 'saved') renderFeed(); }));
   $$('.share-button', feed).forEach(btn => btn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(btn.dataset.url); showToast('Repository link copied'); } catch { showToast('Copy unavailable — open the repository instead'); } }));
   $$('.comment-button', feed).forEach(btn => btn.addEventListener('click', () => openComments(btn.dataset.key)));
   hydrateReadmes();
@@ -550,16 +664,114 @@ function bindFilterButtons() {
   $$('[data-discovery]').forEach(btn => btn.onclick = () => setDiscovery(btn.dataset.discovery));
 }
 
-function openComments(key) { state.activeRepo = key; $('#commentsTitle').textContent = key; renderComments(); $('#commentsDialog').showModal(); }
-function renderComments() {
-  const list = comments[state.activeRepo] || [];
-  $('#commentsCount').textContent = list.length;
-  $('#commentsList').innerHTML = list.length ? list.map(c => `<div class="comment"><div class="comment-avatar">${esc(c.initials)}</div><div class="comment-body"><div class="comment-meta"><strong>${esc(c.author)}</strong><span>${esc(c.time)}</span></div><p>${esc(c.text)}</p><div class="comment-actions"><button>Reply</button><button>Helpful</button></div></div><button class="comment-like" aria-label="Mark comment as helpful">${icon('i-star')}</button></div>`).join('') : `<div class="comment-empty">${icon('i-message')}<strong>No comments yet</strong><span>Be the first builder to share context about this repository.</span></div>`;
+function relativeDate(value) {
+  const seconds = Math.max(1, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return 'now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d`;
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+async function loadGithubDiscussion(repository, force = false) {
+  if (!force && githubDiscussionCache.has(repository)) return githubDiscussionCache.get(repository);
+  const response = await fetch(`https://api.github.com/repos/${repository}/issues?state=all&sort=updated&direction=desc&per_page=12`, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!response.ok) throw new Error(`GitHub discussion ${response.status}`);
+  const issues = await response.json();
+  const threads = issues.filter(issue => issue.comments > 0).slice(0, 4);
+  const batches = await Promise.all(threads.map(async issue => {
+    const commentsResponse = await fetch(`${issue.comments_url}?per_page=8`, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!commentsResponse.ok) return [];
+    const issueComments = await commentsResponse.json();
+    return issueComments.map(comment => ({ ...comment, issueNumber: issue.number, issueTitle: issue.title }));
+  }));
+  const discussion = { issues, comments: batches.flat().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 24) };
+  githubDiscussionCache.set(repository, discussion);
+  return discussion;
+}
+
+async function loadGithubSession() {
+  try {
+    const response = await fetch('/api/me', { credentials: 'include' });
+    githubUser = response.ok ? await response.json() : null;
+  } catch { githubUser = null; }
+  updateGithubIdentity();
+}
+
+function updateGithubIdentity() {
+  const title = $('#githubIdentityTitle');
+  const copy = $('#githubIdentityCopy');
+  const button = $('#githubSignIn');
+  const avatar = $('.comment-form .comment-avatar');
+  const textarea = $('#commentInput');
+  if (githubUser?.login) {
+    title.textContent = `Signed in as @${githubUser.login}`;
+    copy.textContent = 'Replies are posted directly to the selected GitHub issue.';
+    button.textContent = 'Sign out';
+    button.dataset.action = 'signout';
+    avatar.innerHTML = `<img src="${esc(githubUser.avatar_url)}" alt="" />`;
+    textarea.disabled = false;
+  } else {
+    title.textContent = 'Continue with GitHub';
+    copy.textContent = 'Read real issue and pull-request comments. Sign in to reply on GitHub.';
+    button.textContent = 'Sign in';
+    button.dataset.action = 'signin';
+    avatar.innerHTML = icon('i-github');
+    textarea.disabled = true;
+  }
+}
+
+async function openComments(key) {
+  state.activeRepo = key;
+  $('#commentsTitle').textContent = key;
+  $('#commentsCount').textContent = '…';
+  $('#commentsList').innerHTML = `<div class="comment-empty">${icon('i-message')}<strong>Loading GitHub discussion…</strong><span>Fetching recent issue and pull-request comments.</span></div>`;
+  $('#commentsDialog').showModal();
+  await Promise.allSettled([renderComments(), loadGithubSession()]);
+}
+
+async function renderComments(force = false) {
+  try {
+    const discussion = await loadGithubDiscussion(state.activeRepo, force);
+    const target = $('#commentTarget');
+    target.innerHTML = `<option value="">Select an issue to reply</option>${discussion.issues.filter(issue => !issue.pull_request).map(issue => `<option value="${issue.number}">#${issue.number} ${esc(issue.title)}</option>`).join('')}`;
+    $('#commentsCount').textContent = discussion.comments.length;
+    $('#commentsList').innerHTML = discussion.comments.length ? discussion.comments.map(comment => `<article class="comment"><a class="comment-avatar" href="${esc(comment.user?.html_url || comment.html_url)}" target="_blank" rel="noopener"><img src="${esc(comment.user?.avatar_url || './icon.svg')}" alt="" /></a><div class="comment-body"><div class="comment-meta"><strong>@${esc(comment.user?.login || 'ghost')}</strong><span>${relativeDate(comment.created_at)}</span><span>on #${comment.issueNumber}</span></div><p>${esc((comment.body || '').slice(0, 900))}</p><div class="comment-actions"><a href="${esc(comment.html_url)}" target="_blank" rel="noopener">View on GitHub</a><span>${esc(comment.issueTitle)}</span></div></div></article>`).join('') : `<div class="comment-empty">${icon('i-message')}<strong>No recent GitHub comments</strong><span>Open an issue on GitHub to start a repository discussion.</span></div>`;
+  } catch {
+    $('#commentsCount').textContent = '0';
+    $('#commentsList').innerHTML = `<div class="comment-empty">${icon('i-message')}<strong>Discussion unavailable</strong><span>GitHub may be rate-limiting public requests. Try again shortly.</span></div>`;
+  }
 }
 function showToast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => el.classList.remove('show'), 2200); }
 function showFeedStatus(message) { feedStatus.textContent = message; feedStatus.classList.add('visible'); }
 function hideFeedStatus() { feedStatus.classList.remove('visible'); }
 function navigateFeed(direction) { const slides = $$('.repo-slide', feed); if (!slides.length) return; const top = feed.scrollTop + 10; let index = slides.findIndex(s => s.offsetTop >= top); if (index < 0) index = slides.length - 1; const target = slides[Math.max(0, Math.min(slides.length - 1, index + direction))]; target?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+function isStandaloneApp() { return matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true; }
+async function enterFullscreen() {
+  if (document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch {}
+}
+function showInstallOffer() {
+  if (isStandaloneApp() || localStorage.getItem('gitexplore:install-offer')) return;
+  const dialog = $('#installDialog');
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (!installPromptEvent && isIOS) $('#installCopy').textContent = 'Use Share, then Add to Home Screen. GitExplore will open in a clean full-screen app window.';
+  if (!installPromptEvent && !isIOS) $('#installCopy').textContent = 'Use your browser install menu to add GitExplore, or open the feed in full screen now.';
+  if (!dialog.open) dialog.showModal();
+}
+async function installApplication() {
+  if (installPromptEvent) {
+    installPromptEvent.prompt();
+    const choice = await installPromptEvent.userChoice;
+    if (choice.outcome === 'accepted') localStorage.setItem('gitexplore:install-offer', 'installed');
+    installPromptEvent = null;
+    $('#installDialog').close();
+    return;
+  }
+  await enterFullscreen();
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  showToast(isIOS ? 'Tap Share, then Add to Home Screen' : 'Use Install app in your browser menu');
+}
 function openTechDetails(technology, repository) {
   const display = technology.replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
   const key = Object.keys(techDescriptions).find(name => name.toLowerCase() === display.toLowerCase());
@@ -573,6 +785,8 @@ function applyCardPanelState(card, nextPanel) {
   card.classList.toggle('panel-focused', Boolean(nextPanel));
   card.dataset.activePanel = nextPanel;
   if (nextPanel) card.classList.add(`panel-${nextPanel}`);
+  const stackTitle = $('.stack-heading strong', card);
+  if (stackTitle) stackTitle.textContent = nextPanel === 'stack' ? 'Stack & workings' : 'Tech stack';
   $$('.deck-panel', card).forEach(panel => panel.classList.toggle('is-active', panel.dataset.panelName === nextPanel));
   $$('[data-panel-handle]', card).forEach(handle => {
     const selected = handle.dataset.panelHandle === nextPanel;
@@ -672,8 +886,47 @@ $('#closeTech').addEventListener('click', () => $('#techDialog').close());
 $('#techDialog').addEventListener('click', e => { if (e.target === $('#techDialog')) $('#techDialog').close(); });
 $('#closeComments').addEventListener('click', () => $('#commentsDialog').close());
 $('#commentsDialog').addEventListener('click', e => { if (e.target === $('#commentsDialog')) $('#commentsDialog').close(); });
-$('#githubSignIn').addEventListener('click', () => showToast('GitHub OAuth app credentials are required to enable sign-in'));
-$('#commentForm').addEventListener('submit', e => { e.preventDefault(); const input = $('#commentInput'); const text = input.value.trim(); if (!text) return; (comments[state.activeRepo] ||= []).push({ author: 'You', initials: 'YOU', time: 'now', text }); localStorage.setItem('repodive:comments', JSON.stringify(comments)); input.value = ''; renderComments(); renderFeed(); showToast('Comment added locally'); });
+$('#dismissInstall').addEventListener('click', () => { localStorage.setItem('gitexplore:install-offer', 'dismissed'); $('#installDialog').close(); });
+$('#fullscreenOnly').addEventListener('click', async () => { await enterFullscreen(); localStorage.setItem('gitexplore:install-offer', 'fullscreen'); $('#installDialog').close(); });
+$('#installApp').addEventListener('click', installApplication);
+$('#installDialog').addEventListener('click', e => { if (e.target === $('#installDialog')) { localStorage.setItem('gitexplore:install-offer', 'dismissed'); $('#installDialog').close(); } });
+$('#githubSignIn').addEventListener('click', async () => {
+  if ($('#githubSignIn').dataset.action === 'signout') {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    githubUser = null;
+    updateGithubIdentity();
+    showToast('Signed out of GitHub');
+    return;
+  }
+  try {
+    const response = await fetch('/api/auth/config');
+    const config = response.ok ? await response.json() : { configured: false };
+    if (!config.configured) throw new Error('OAuth not configured');
+    location.href = `/api/auth/github?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
+  } catch {
+    showToast('GitHub sign-in needs the server OAuth variables from .env.example');
+  }
+});
+$('#commentForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = $('#commentInput');
+  const issueNumber = Number($('#commentTarget').value);
+  const body = input.value.trim();
+  if (!githubUser) { showToast('Sign in with GitHub to reply'); return; }
+  if (!issueNumber) { showToast('Choose the GitHub issue you want to reply to'); return; }
+  if (!body) return;
+  const submit = $('#commentForm button[type="submit"]');
+  submit.disabled = true;
+  try {
+    const response = await fetch('/api/github/comments', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repository: state.activeRepo, issueNumber, body }) });
+    if (!response.ok) throw new Error('GitHub reply failed');
+    input.value = '';
+    githubDiscussionCache.delete(state.activeRepo);
+    await renderComments(true);
+    showToast('Reply posted to GitHub');
+  } catch { showToast('Could not post this GitHub reply'); }
+  finally { submit.disabled = false; }
+});
 document.addEventListener('keydown', e => {
   if (e.target.matches('input, textarea') || $('#commentsDialog').open || $('#filterDialog').open || $('#techDialog').open) return;
   const readme = e.target.closest?.('.readme-preview');
@@ -686,6 +939,8 @@ document.addEventListener('keydown', e => {
 });
 feed.addEventListener('click', e => {
   if (e.target.closest('.diagram-external, .architecture-unavailable a')) return;
+  const translateButton = e.target.closest('.readme-translate');
+  if (translateButton) { translateReadme(translateButton.closest('.readme-preview')); return; }
   const zoomControl = e.target.closest('.diagram-zoom');
   if (zoomControl) { changeDiagramZoom(zoomControl); return; }
   const panelHandle = e.target.closest('[data-panel-handle]');
@@ -720,5 +975,18 @@ feed.addEventListener('click', e => {
   if (preview) { const card = preview.closest('.repo-card'); if (card.dataset.activePanel !== 'readme') setCardPanel(card, 'readme'); }
 });
 feed.addEventListener('scroll', () => { if (state.view !== 'saved' && !state.loading && feed.scrollTop + feed.clientHeight > feed.scrollHeight - 500) { state.page += 1; loadRepos({ append: true }); } }, { passive: true });
+
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  installPromptEvent = event;
+  setTimeout(showInstallOffer, 900);
+});
+window.addEventListener('appinstalled', () => {
+  localStorage.setItem('gitexplore:install-offer', 'installed');
+  if ($('#installDialog').open) $('#installDialog').close();
+  showToast('GitExplore was added to your home screen');
+});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+if (!isStandaloneApp() && !localStorage.getItem('gitexplore:install-offer')) setTimeout(showInstallOffer, 2200);
 
 renderFilters(); bindFilterButtons(); updateSavedCount(); renderFeed(); loadRepos();
