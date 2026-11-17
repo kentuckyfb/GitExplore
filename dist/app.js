@@ -53,6 +53,7 @@ const readmeOriginals = new WeakMap();
 const stackCache = new Map();
 const architectureCache = new Map();
 const githubDiscussionCache = new Map();
+const repoTranslationStates = new Map();
 let githubUser = null;
 let installPromptEvent = null;
 let readmeObserver;
@@ -105,11 +106,18 @@ function renderFeed() {
   feed.classList.remove('profile-feed');
   const repos = getFilteredRepos();
   if (!repos.length) {
+    if (state.loading) {
+      feed.innerHTML = `<div class="feed-loader" role="status" aria-live="polite"><div class="loader-mark"><span></span><span></span><span></span><i></i></div><strong>Finding repositories</strong><p>Scanning GitHub for something worth exploring.</p></div>`;
+      return;
+    }
     feed.innerHTML = `<div class="empty-state"><h2>No repositories found.</h2><p>Try a broader stack filter or a different search.</p></div>`;
     return;
   }
   feed.innerHTML = repos.map((repo, index) => repoCard(repo, index)).join('');
   attachCardEvents();
+  $$('.repo-slide', feed).forEach(slide => {
+    if (translationState(slide.dataset.repoKey).enabled) applyCardTranslation($('.repo-card', slide), true).catch(() => {});
+  });
 }
 
 function repoSnapshot(repo) {
@@ -178,6 +186,7 @@ function repoCard(repo, index) {
               <img src="${esc(repo.owner.avatar_url)}" alt="" loading="lazy" />
               <strong>@${esc(repo.owner.login)}</strong>
             </a>
+            <button class="repo-translate ${translationState(key).enabled ? 'active' : ''}" type="button" data-translate-repo="${esc(key)}" aria-label="Translate repository content" title="Translate repository content">${icon('i-translate')}</button>
           </div>
           <h2 class="repo-name">${esc(repo.name)}</h2>
           <p class="repo-description">${esc(repo.description || 'A public repository waiting to be explored.')}</p>
@@ -202,7 +211,6 @@ function repoCard(repo, index) {
           <span class="readme-state sr-only">Loading repository documentation</span>
           <div class="readme-copy"><p>${esc(repo.description || 'Open the repository to read its documentation.')}</p></div>
           <span class="readme-ellipsis" aria-hidden="true">…</span>
-          <button class="readme-translate" type="button" hidden>${icon('i-translate')}<span>Translate</span></button>
           <a class="readme-link" href="${esc(repo.html_url)}#readme" target="_blank" rel="noopener" aria-label="Open full repository documentation" title="Open full repository documentation">${icon('i-arrow')}</a>
           </div>
         </section>
@@ -310,11 +318,7 @@ async function prepareReadme(element, paragraphs) {
   if (stack && knownLanguages) renderStack(stack, knownLanguages);
   const language = await detectReadmeLanguage(paragraphs.join(' '));
   readmeOriginals.set(element, { paragraphs, language, translated: false });
-  const button = $('.readme-translate', element);
-  if (button && language && !language.toLowerCase().startsWith('en')) {
-    button.hidden = false;
-    button.dataset.language = language;
-  }
+  if (translationState(element.dataset.repo).enabled) await applyReadmeTranslation(element);
 }
 
 async function translateWithGoogle(text, sourceLanguage) {
@@ -376,18 +380,14 @@ async function translateDirectly(paragraphs, sourceLanguage) {
   }
 }
 
-async function translateReadme(element) {
+async function applyReadmeTranslation(element) {
   const record = readmeOriginals.get(element);
-  const button = $('.readme-translate', element);
-  if (!record || !button) return;
-  if (record.translated) {
-    renderReadmeParagraphs(element, record.paragraphs);
-    record.translated = false;
-    button.querySelector('span').textContent = 'Translate';
+  if (!record) return;
+  if (record.translatedParagraphs) {
+    renderReadmeParagraphs(element, record.translatedParagraphs);
+    record.translated = true;
     return;
   }
-  button.disabled = true;
-  button.querySelector('span').textContent = 'Translating…';
   try {
     let translated;
     if ('Translator' in window) {
@@ -410,12 +410,101 @@ async function translateReadme(element) {
     if (!Array.isArray(translated) || translated.length !== record.paragraphs.length) throw new Error('Invalid translation result');
     renderReadmeParagraphs(element, translated);
     record.translated = true;
-    button.querySelector('span').textContent = 'Show original';
+    record.translatedParagraphs = translated;
   } catch {
-    button.querySelector('span').textContent = 'Translate';
+    throw new Error('Translation unavailable');
+  }
+}
+
+function translationState(repository) {
+  if (!repoTranslationStates.has(repository)) repoTranslationStates.set(repository, { enabled: false, description: null, busy: false, comments: new Map() });
+  return repoTranslationStates.get(repository);
+}
+
+async function translateParagraphs(paragraphs, sourceLanguage = 'auto') {
+  const results = [];
+  for (let index = 0; index < paragraphs.length; index += 6) {
+    const batch = paragraphs.slice(index, index + 6);
+    const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paragraphs: batch, sourceLanguage }) });
+    if (!response.ok) throw new Error('Translation service unavailable');
+    const payload = await response.json();
+    if (!Array.isArray(payload.paragraphs) || payload.paragraphs.length !== batch.length) throw new Error('Invalid translation result');
+    results.push(...payload.paragraphs);
+  }
+  return results;
+}
+
+function syncTranslationControls(repository) {
+  const record = translationState(repository);
+  $$('[data-translate-repo]').filter(button => button.dataset.translateRepo === repository).forEach(button => {
+    button.classList.toggle('active', record.enabled);
+    button.classList.toggle('is-busy', record.busy);
+    button.disabled = record.busy;
+    button.title = record.enabled ? 'Show original repository content' : 'Translate repository content';
+    button.setAttribute('aria-label', button.title);
+  });
+  const commentsButton = $('#commentsTranslate');
+  if (state.activeRepo === repository) {
+    commentsButton.classList.toggle('active', record.enabled);
+    commentsButton.classList.toggle('is-busy', record.busy);
+    commentsButton.disabled = record.busy;
+    commentsButton.title = record.enabled ? 'Show original discussion' : 'Translate repository discussion';
+  }
+}
+
+async function applyCardTranslation(card, enabled) {
+  if (!card) return;
+  const repository = card.closest('.repo-slide').dataset.repoKey;
+  const record = translationState(repository);
+  const description = $('.repo-description', card);
+  if (!description.dataset.original) description.dataset.original = description.textContent;
+  const readme = $('.readme-preview', card);
+  if (!enabled) {
+    description.textContent = description.dataset.original;
+    const readmeRecord = readmeOriginals.get(readme);
+    if (readmeRecord) { renderReadmeParagraphs(readme, readmeRecord.paragraphs); readmeRecord.translated = false; }
+    return;
+  }
+  if (!record.description) [record.description] = await translateParagraphs([description.dataset.original]);
+  description.textContent = record.description;
+  if (!readmeOriginals.has(readme)) await loadReadmePreview(readme);
+  await applyReadmeTranslation(readme);
+}
+
+async function translateVisibleComments(repository) {
+  const record = translationState(repository);
+  const elements = $$('.comment p, .comment-actions span', $('#commentsList'));
+  const originals = elements.map(element => element.dataset.original || element.textContent).filter(Boolean);
+  const missing = [...new Set(originals.filter(text => !record.comments.has(text)))];
+  if (missing.length) {
+    const translated = await translateParagraphs(missing);
+    missing.forEach((text, index) => record.comments.set(text, translated[index]));
+  }
+  elements.forEach(element => {
+    if (!element.dataset.original) element.dataset.original = element.textContent;
+    element.textContent = record.comments.get(element.dataset.original) || element.dataset.original;
+  });
+}
+
+async function toggleRepositoryTranslation(repository) {
+  const record = translationState(repository);
+  if (record.busy) return;
+  record.enabled = !record.enabled;
+  record.busy = true;
+  syncTranslationControls(repository);
+  try {
+    const slide = $$('.repo-slide', feed).find(element => element.dataset.repoKey === repository);
+    await applyCardTranslation(slide && $('.repo-card', slide), record.enabled);
+    if ($('#commentsDialog').open && state.activeRepo === repository) await renderComments();
+    showToast(record.enabled ? 'Repository content translated' : 'Showing original content');
+  } catch {
+    record.enabled = false;
+    const slide = $$('.repo-slide', feed).find(element => element.dataset.repoKey === repository);
+    await applyCardTranslation(slide && $('.repo-card', slide), false);
     showToast('Translation is temporarily unavailable');
   } finally {
-    button.disabled = false;
+    record.busy = false;
+    syncTranslationControls(repository);
   }
 }
 
@@ -737,7 +826,7 @@ async function loadRepos({ append = false } = {}) {
     state.page = 1;
     state.cycle += 1;
     delivered.clear();
-    state.repos = filterFallback();
+    state.repos = [];
     renderFeed();
   }
   const q = [...discoveryQuery(), 'archived:false', 'fork:false', 'is:public'];
@@ -873,6 +962,7 @@ async function openComments(key) {
   $('#commentsTitle').textContent = key;
   $('#commentsCount').textContent = '…';
   $('#commentsList').innerHTML = `<div class="comment-empty">${icon('i-message')}<strong>Loading GitHub discussion…</strong><span>Fetching recent issue and pull-request comments.</span></div>`;
+  syncTranslationControls(key);
   $('#commentsDialog').showModal();
   await Promise.allSettled([renderComments(), loadGithubSession()]);
 }
@@ -884,6 +974,7 @@ async function renderComments(force = false) {
     target.innerHTML = `<option value="">Select an issue to reply</option>${discussion.issues.filter(issue => !issue.pull_request).map(issue => `<option value="${issue.number}">#${issue.number} ${esc(issue.title)}</option>`).join('')}`;
     $('#commentsCount').textContent = discussion.comments.length;
     $('#commentsList').innerHTML = discussion.comments.length ? discussion.comments.map(comment => `<article class="comment"><a class="comment-avatar" href="${esc(comment.user?.html_url || comment.html_url)}" target="_blank" rel="noopener"><img src="${esc(comment.user?.avatar_url || './icon.svg')}" alt="" /></a><div class="comment-body"><div class="comment-meta"><strong>@${esc(comment.user?.login || 'ghost')}</strong><span>${relativeDate(comment.created_at)}</span><span>on #${comment.issueNumber}</span></div><p>${esc((comment.body || '').slice(0, 900))}</p><div class="comment-actions"><a href="${esc(comment.html_url)}" target="_blank" rel="noopener">View on GitHub</a><span>${esc(comment.issueTitle)}</span></div></div></article>`).join('') : `<div class="comment-empty">${icon('i-message')}<strong>No recent GitHub comments</strong><span>Open an issue on GitHub to start a repository discussion.</span></div>`;
+    if (discussion.comments.length && translationState(state.activeRepo).enabled) await translateVisibleComments(state.activeRepo);
   } catch {
     $('#commentsCount').textContent = '0';
     $('#commentsList').innerHTML = `<div class="comment-empty">${icon('i-message')}<strong>Discussion unavailable</strong><span>GitHub may be rate-limiting public requests. Try again shortly.</span></div>`;
@@ -1043,6 +1134,7 @@ $('#fullscreenOnly').addEventListener('click', async () => { await enterFullscre
 $('#installApp').addEventListener('click', installApplication);
 $('#installDialog').addEventListener('click', e => { if (e.target === $('#installDialog')) { localStorage.setItem('gitexplore:install-offer', 'dismissed'); $('#installDialog').close(); } });
 $('#githubSignIn').addEventListener('click', handleGithubAuth);
+$('#commentsTranslate').addEventListener('click', () => state.activeRepo && toggleRepositoryTranslation(state.activeRepo));
 $('#commentForm').addEventListener('submit', async e => {
   e.preventDefault();
   const input = $('#commentInput');
@@ -1075,8 +1167,8 @@ document.addEventListener('keydown', e => {
 });
 feed.addEventListener('click', e => {
   if (e.target.closest('.diagram-external, .architecture-unavailable a')) return;
-  const translateButton = e.target.closest('.readme-translate');
-  if (translateButton) { translateReadme(translateButton.closest('.readme-preview')); return; }
+  const translateButton = e.target.closest('.repo-translate');
+  if (translateButton) { toggleRepositoryTranslation(translateButton.dataset.translateRepo); return; }
   const zoomControl = e.target.closest('.diagram-zoom');
   if (zoomControl) { changeDiagramZoom(zoomControl); return; }
   const panelHandle = e.target.closest('[data-panel-handle]');
@@ -1125,4 +1217,4 @@ window.addEventListener('appinstalled', () => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 if (!isStandaloneApp() && !localStorage.getItem('gitexplore:install-offer')) setTimeout(showInstallOffer, 2200);
 
-renderFilters(); bindFilterButtons(); updateSavedCount(); renderFeed(); loadRepos();
+renderFilters(); bindFilterButtons(); updateSavedCount(); loadRepos();
