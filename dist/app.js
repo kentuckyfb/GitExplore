@@ -262,6 +262,65 @@ async function prepareReadme(element, paragraphs) {
   }
 }
 
+async function translateWithGoogle(text, sourceLanguage) {
+  const endpoint = new URL('https://translate.googleapis.com/translate_a/single');
+  endpoint.searchParams.set('client', 'gtx');
+  endpoint.searchParams.set('sl', sourceLanguage || 'auto');
+  endpoint.searchParams.set('tl', 'en');
+  endpoint.searchParams.set('dt', 't');
+  endpoint.searchParams.set('q', text);
+  const response = await fetch(endpoint);
+  if (!response.ok) throw new Error(`Translation service ${response.status}`);
+  const payload = await response.json();
+  const translated = Array.isArray(payload?.[0]) ? payload[0].map(segment => segment?.[0] || '').join('') : '';
+  if (!translated) throw new Error('Empty translation');
+  return translated;
+}
+
+function splitTranslationChunks(text, maxBytes = 450) {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  let chunk = '';
+  for (const character of text) {
+    if (chunk && encoder.encode(chunk + character).length > maxBytes) { chunks.push(chunk); chunk = character; }
+    else chunk += character;
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+async function translateWithMyMemory(text, sourceLanguage) {
+  const languageMap = { zh: 'zh-CN', pt: 'pt-PT' };
+  const source = languageMap[sourceLanguage] || sourceLanguage || 'auto';
+  const pieces = [];
+  for (const chunk of splitTranslationChunks(text)) {
+    const endpoint = new URL('https://api.mymemory.translated.net/get');
+    endpoint.searchParams.set('q', chunk);
+    endpoint.searchParams.set('langpair', `${source}|en`);
+    const response = await fetch(endpoint);
+    if (!response.ok) throw new Error(`Backup translation service ${response.status}`);
+    const payload = await response.json();
+    const translated = payload?.responseData?.translatedText;
+    if (!translated) throw new Error('Empty backup translation');
+    const decoder = document.createElement('textarea');
+    decoder.innerHTML = translated;
+    pieces.push(decoder.value);
+  }
+  return pieces.join('');
+}
+
+async function translateDirectly(paragraphs, sourceLanguage) {
+  try {
+    const translated = [];
+    for (const paragraph of paragraphs) translated.push(await translateWithGoogle(paragraph, sourceLanguage));
+    return translated;
+  } catch {
+    const translated = [];
+    for (const paragraph of paragraphs) translated.push(await translateWithMyMemory(paragraph, sourceLanguage));
+    return translated;
+  }
+}
+
 async function translateReadme(element) {
   const record = readmeOriginals.get(element);
   const button = $('.readme-translate', element);
@@ -284,9 +343,14 @@ async function translateReadme(element) {
       } catch {}
     }
     if (!translated?.length) {
-      const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paragraphs: record.paragraphs, sourceLanguage: record.language }) });
-      if (!response.ok) throw new Error('Translation service unavailable');
-      translated = (await response.json()).paragraphs;
+      try { translated = await translateDirectly(record.paragraphs, record.language); }
+      catch {}
+    }
+    if (!translated?.length) {
+      try {
+        const response = await fetch('/api/translate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paragraphs: record.paragraphs, sourceLanguage: record.language }) });
+        if (response.ok) translated = (await response.json()).paragraphs;
+      } catch {}
     }
     if (!Array.isArray(translated) || translated.length !== record.paragraphs.length) throw new Error('Invalid translation result');
     renderReadmeParagraphs(element, translated);
