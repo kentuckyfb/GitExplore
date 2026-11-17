@@ -72,6 +72,45 @@ async function githubFetch(path, options = {}) {
   return fetch(`https://api.github.com${path}`, { ...options, headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'GitExplore', ...(options.headers || {}) } });
 }
 
+function translationChunks(text, maxBytes = 450) {
+  const chunks = [];
+  let chunk = '';
+  for (const character of text) {
+    if (chunk && Buffer.byteLength(chunk + character, 'utf8') > maxBytes) { chunks.push(chunk); chunk = character; }
+    else chunk += character;
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+async function translateText(text, source) {
+  try {
+    const endpoint = new URL('https://translate.googleapis.com/translate_a/single');
+    Object.entries({ client: 'gtx', sl: source, tl: 'en', dt: 't', q: text }).forEach(([key, value]) => endpoint.searchParams.set(key, value));
+    const response = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
+    if (!response.ok) throw new Error('Primary translation failed');
+    const payload = await response.json();
+    const translated = Array.isArray(payload?.[0]) ? payload[0].map(part => part?.[0] || '').join('') : '';
+    if (!translated) throw new Error('Empty primary translation');
+    return translated;
+  } catch {
+    const languageMap = { zh: 'zh-CN', pt: 'pt-PT' };
+    const from = source === 'auto' ? 'autodetect' : (languageMap[source] || source);
+    const pieces = [];
+    for (const chunk of translationChunks(text)) {
+      const endpoint = new URL('https://api.mymemory.translated.net/get');
+      endpoint.searchParams.set('q', chunk);
+      endpoint.searchParams.set('langpair', `${from}|en`);
+      const response = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
+      if (!response.ok) throw new Error('Fallback translation failed');
+      const payload = await response.json();
+      if (Number(payload?.responseStatus) !== 200 || !payload?.responseData?.translatedText) throw new Error('Empty fallback translation');
+      pieces.push(payload.responseData.translatedText);
+    }
+    return pieces.join('');
+  }
+}
+
 module.exports = async function handler(req, res) {
   const path = route(req);
   const appOrigin = origin(req);
@@ -147,14 +186,7 @@ module.exports = async function handler(req, res) {
     const source = /^[a-z]{2,3}(?:-[a-z]{2})?$/.test(requested) ? requested : 'auto';
     if (!paragraphs.length || paragraphs.length > 6 || paragraphs.some(text => text.length > 2400) || paragraphs.join('').length > 9000) return json(res, 400, { error: 'Invalid translation request.' });
     try {
-      const translated = await Promise.all(paragraphs.map(async text => {
-        const endpoint = new URL('https://translate.googleapis.com/translate_a/single');
-        Object.entries({ client: 'gtx', sl: source, tl: 'en', dt: 't', q: text }).forEach(([key, value]) => endpoint.searchParams.set(key, value));
-        const response = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
-        if (!response.ok) throw new Error('Translation failed');
-        const payload = await response.json();
-        return Array.isArray(payload?.[0]) ? payload[0].map(part => part?.[0] || '').join('') : '';
-      }));
+      const translated = await Promise.all(paragraphs.map(text => translateText(text, source)));
       if (translated.some(value => !value)) throw new Error('Empty translation');
       return json(res, 200, { paragraphs: translated });
     } catch { return json(res, 502, { error: 'Translation service unavailable.' }); }

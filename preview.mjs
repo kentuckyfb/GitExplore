@@ -69,6 +69,45 @@ async function readJson(request) {
   return JSON.parse(body || '{}');
 }
 
+function translationChunks(text, maxBytes = 450) {
+  const chunks = [];
+  let chunk = '';
+  for (const character of text) {
+    if (chunk && Buffer.byteLength(chunk + character, 'utf8') > maxBytes) { chunks.push(chunk); chunk = character; }
+    else chunk += character;
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+async function translateText(text, source) {
+  try {
+    const endpoint = new URL('https://translate.googleapis.com/translate_a/single');
+    Object.entries({ client: 'gtx', sl: source, tl: 'en', dt: 't', q: text }).forEach(([key, value]) => endpoint.searchParams.set(key, value));
+    const response = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
+    if (!response.ok) throw new Error('Primary translation failed');
+    const payload = await response.json();
+    const translated = Array.isArray(payload?.[0]) ? payload[0].map(part => part?.[0] || '').join('') : '';
+    if (!translated) throw new Error('Empty primary translation');
+    return translated;
+  } catch {
+    const languageMap = { zh: 'zh-CN', pt: 'pt-PT' };
+    const from = source === 'auto' ? 'autodetect' : (languageMap[source] || source);
+    const pieces = [];
+    for (const chunk of translationChunks(text)) {
+      const endpoint = new URL('https://api.mymemory.translated.net/get');
+      endpoint.searchParams.set('q', chunk);
+      endpoint.searchParams.set('langpair', `${from}|en`);
+      const response = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
+      if (!response.ok) throw new Error('Fallback translation failed');
+      const payload = await response.json();
+      if (Number(payload?.responseStatus) !== 200 || !payload?.responseData?.translatedText) throw new Error('Empty fallback translation');
+      pieces.push(payload.responseData.translatedText);
+    }
+    return pieces.join('');
+  }
+}
+
 function safeReturnTo(value) { return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//') ? value : '/'; }
 function sameOrigin(request) { return !request.headers.origin || request.headers.origin === appOrigin; }
 function currentSession(request) {
@@ -133,18 +172,7 @@ async function handleApi(request, response, url) {
     const sourceLanguage = /^[a-z]{2,3}(?:-[a-z]{2})?$/.test(requestedLanguage) ? requestedLanguage : 'auto';
     if (!paragraphs.length || paragraphs.length > 6 || paragraphs.some(text => text.length > 2400) || paragraphs.join('').length > 9000) { sendJson(response, 400, { error: 'Invalid translation request.' }); return true; }
     try {
-      const translated = await Promise.all(paragraphs.map(async text => {
-        const endpoint = new URL('https://translate.googleapis.com/translate_a/single');
-        endpoint.searchParams.set('client', 'gtx');
-        endpoint.searchParams.set('sl', sourceLanguage);
-        endpoint.searchParams.set('tl', 'en');
-        endpoint.searchParams.set('dt', 't');
-        endpoint.searchParams.set('q', text);
-        const upstream = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
-        if (!upstream.ok) throw new Error(`Translation upstream ${upstream.status}`);
-        const payload = await upstream.json();
-        return Array.isArray(payload?.[0]) ? payload[0].map(segment => segment?.[0] || '').join('') : '';
-      }));
+      const translated = await Promise.all(paragraphs.map(text => translateText(text, sourceLanguage)));
       if (translated.some(text => !text)) throw new Error('Empty translation');
       sendJson(response, 200, { paragraphs: translated });
     } catch { sendJson(response, 502, { error: 'Translation service unavailable.' }); }
