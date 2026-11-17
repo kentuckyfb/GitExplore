@@ -285,6 +285,11 @@ kbd { font: 600 9px ui-monospace, SFMono-Regular, monospace; border: 1px solid v
 .install-actions { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8px; margin-top: 24px; }
 .toast { position: fixed; left: 50%; bottom: 24px; z-index: 10; transform: translate(-50%, 20px); padding: 10px 14px; border-radius: 8px; background: var(--dark); color: #fff; font-size: 11px; opacity: 0; pointer-events: none; transition: .2s ease; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+.architecture-source { display: inline-flex; height: 20px; align-items: center; margin-left: auto; padding: 0 7px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; background: rgba(255,255,255,.06); color: #aeb9b0; font-size: 7px; font-weight: 700; letter-spacing: .025em; white-space: nowrap; }
+.mermaid-canvas .node rect, .mermaid-canvas .node polygon, .mermaid-canvas .node path { rx: 8px; ry: 8px; filter: drop-shadow(0 2px 3px rgba(25,35,28,.08)); }
+.mermaid-canvas .edgePath path { stroke-width: 1.25px; }
+.mermaid-canvas .edgeLabel { color: #68736b; font-size: 9px; }
+.mermaid-canvas .cluster rect { rx: 10px; ry: 10px; }
 
 /* Laptop, desktop and tablet: a compact repository workspace instead of two tall, uneven columns. */
 @media (min-width: 601px) {
@@ -311,9 +316,9 @@ kbd { font: 600 9px ui-monospace, SFMono-Regular, monospace; border: 1px solid v
   .readme-copy p { font-size: 11px; line-height: 1.6; }
   .readme-copy p:first-child { font-size: 12px; }
   .diagram-frame { position: relative; min-height: 0; flex: 1; overflow: hidden; border: 1px solid #39433b; border-radius: 10px; background: #222b24; }
-  .mermaid-canvas { position: absolute; inset: 0; z-index: 4; overflow: auto; background: #f7f4fb; scrollbar-width: thin; }
+  .mermaid-canvas { position: absolute; inset: 0; z-index: 4; overflow: auto; padding: 8px; background-color: #f6f8f5; background-image: radial-gradient(#d8ded8 .7px, transparent .7px); background-size: 12px 12px; scrollbar-width: thin; }
   .mermaid-canvas[hidden] { display: none; }
-  .mermaid-canvas svg { display: block; width: 100%; height: auto; max-width: none !important; min-width: 0; min-height: 100%; margin: auto; background: #f7f4fb; }
+  .mermaid-canvas svg { display: block; width: 100%; height: 100%; max-width: none !important; min-width: 0; min-height: 100%; margin: auto; background: transparent; }
   .diagram-fallback { position: absolute; inset: 0; overflow: hidden; }
   .diagram-fallback::before { content: ''; position: absolute; inset: 0; opacity: .28; background-image: radial-gradient(#7b887d 1px, transparent 1px); background-size: 13px 13px; }
   .diagram-loading { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; color: #8f9a91; font-size: 8px; }
@@ -438,9 +443,9 @@ kbd { font: 600 9px ui-monospace, SFMono-Regular, monospace; border: 1px solid v
   .diagram-preview-head strong { min-width: 0; font-size: 9px; line-height: 1; }
   .diagram-preview-head strong svg { width: 13px; height: 13px; flex: 0 0 13px; }
   .diagram-frame { position: relative; min-height: 70px; flex: 1; overflow: hidden; border: 1px solid #39433b; border-radius: 9px; background: #222b24; }
-  .mermaid-canvas { position: absolute; inset: 0; z-index: 4; overflow: auto; background: #f7f4fb; scrollbar-width: thin; touch-action: pan-x pan-y; }
+  .mermaid-canvas { position: absolute; inset: 0; z-index: 4; overflow: auto; padding: 7px; background-color: #f6f8f5; background-image: radial-gradient(#d8ded8 .7px, transparent .7px); background-size: 12px 12px; scrollbar-width: thin; touch-action: pan-x pan-y; }
   .mermaid-canvas[hidden] { display: none; }
-  .mermaid-canvas svg { display: block; width: 100%; height: auto; max-width: none !important; min-width: 0; min-height: 100%; margin: auto; background: #f7f4fb; transition: width .18s ease; }
+  .mermaid-canvas svg { display: block; width: 100%; height: 100%; max-width: none !important; min-width: 0; min-height: 100%; margin: auto; background: transparent; transition: width .18s ease; }
   .diagram-toolbar { position: absolute; top: 10px; right: 10px; z-index: 10; display: none; align-items: center; gap: 4px; padding: 4px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(24,31,26,.9); box-shadow: 0 8px 24px rgba(0,0,0,.25); backdrop-filter: blur(8px); }
   .diagram-tool { display: grid; width: 29px; height: 29px; padding: 0; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #e2e8e3; line-height: 0; cursor: pointer; text-decoration: none; }
   .diagram-tool:hover { background: #39443c; }

@@ -215,7 +215,7 @@ function repoCard(repo, index) {
           </div>
         </section>
         <section class="diagram-preview deck-panel" data-panel-name="architecture" data-architecture-repo="${esc(repo.full_name)}" data-branch="${esc(repo.default_branch || 'main')}" data-primary="${esc(primaryLanguage)}" data-topics="${esc(tags.join(','))}" data-gitdiagram="${archUrl}" aria-label="Repository architecture preview">
-          <div class="diagram-preview-head deck-panel-handle" data-panel-handle="architecture"><strong>${icon('i-diagram')} Architecture</strong></div>
+          <div class="diagram-preview-head deck-panel-handle" data-panel-handle="architecture"><strong>${icon('i-diagram')} Architecture</strong><span class="architecture-source">Repository map</span></div>
           <div class="diagram-frame deck-panel-body" role="button" tabindex="0" aria-label="Expand repository architecture">
             <div class="mermaid-canvas" hidden></div>
             <div class="diagram-fallback" aria-live="polite">
@@ -603,7 +603,7 @@ function loadMermaidModule() {
   if (!mermaidModulePromise) {
     mermaidModulePromise = import('https://cdn.jsdelivr.net/npm/mermaid@11.12.1/dist/mermaid.esm.min.mjs').then(module => {
       const mermaid = module.default;
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'antiscript', theme: 'base', flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'basis' }, themeVariables: { primaryColor: '#eaf1ff', primaryBorderColor: '#6b9cff', primaryTextColor: '#18211b', lineColor: '#6f776f', secondaryColor: '#fff0d8', tertiaryColor: '#f0f3ee', clusterBkg: '#f7f8f5', clusterBorder: '#d6dbd3', fontFamily: 'Inter, ui-sans-serif, system-ui' } });
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'antiscript', theme: 'base', flowchart: { htmlLabels: false, useMaxWidth: true, curve: 'linear', nodeSpacing: 28, rankSpacing: 42 }, themeVariables: { background: '#f6f8f5', primaryColor: '#eef3eb', primaryBorderColor: '#819085', primaryTextColor: '#1d2920', lineColor: '#718078', secondaryColor: '#e9f0ff', tertiaryColor: '#fff2df', clusterBkg: '#f4f7f2', clusterBorder: '#cbd4cc', edgeLabelBackground: '#f6f8f5', fontFamily: 'Inter, ui-sans-serif, system-ui', fontSize: '12px' } });
       return mermaid;
     });
   }
@@ -611,19 +611,11 @@ function loadMermaidModule() {
 }
 
 async function fetchGitDiagramGraph(fullName) {
-  const response = await fetch('https://gitdiagram.com/mcp', {
-    method: 'POST',
-    headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_repository_diagram', arguments: { repository: fullName } } })
-  });
+  const response = await fetch(`/api/architecture?repository=${encodeURIComponent(fullName)}`);
   if (!response.ok) throw new Error('GitDiagram graph unavailable');
-  const eventStream = await response.text();
-  const dataLine = eventStream.split(/\r?\n/).find(line => line.startsWith('data: '));
-  if (!dataLine) throw new Error('GitDiagram returned no graph');
-  const payload = JSON.parse(dataLine.slice(6));
-  const artifact = payload.result?._meta?.['com.gitdiagram/diagram'];
-  if (artifact?.status !== 'found' || !artifact.mermaid) throw new Error('GitDiagram has not generated this repository');
-  return artifact.mermaid;
+  const payload = await response.json();
+  if (!payload.mermaid) throw new Error('GitDiagram returned no graph');
+  return payload.mermaid;
 }
 
 async function renderMermaidArchitecture(element, source) {
@@ -651,7 +643,7 @@ function applyDiagramZoom(frame, zoom, resetScroll = false) {
   const nextZoom = Math.max(.5, Math.min(3, zoom));
   canvas.dataset.zoom = String(nextZoom);
   svg.style.width = nextZoom === 1 ? '100%' : `${Math.round(canvas.clientWidth * nextZoom)}px`;
-  svg.style.height = 'auto';
+  svg.style.height = nextZoom === 1 ? '100%' : 'auto';
   svg.style.minWidth = '0';
   if (resetScroll) canvas.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
   $$('.diagram-zoom', frame).forEach(button => {
@@ -676,17 +668,31 @@ function renderArchitectureUnavailable(element) {
 }
 
 function selectArchitectureEntries(tree, fullName, branch) {
-  const clean = tree.filter(item => item.path && !item.path.split('/').some(part => part.startsWith('.') && part !== '.github'));
-  const topDirectories = clean.filter(item => item.type === 'tree' && !item.path.includes('/')).slice(0, 6);
-  const childDirectories = topDirectories.flatMap(parent => clean.filter(item => item.type === 'tree' && item.path.startsWith(`${parent.path}/`) && item.path.split('/').length === 2).slice(0, 1));
-  const importantFiles = clean.filter(item => item.type === 'blob' && !item.path.includes('/') && /^(package\.json|pyproject\.toml|cargo\.toml|go\.mod|dockerfile|compose\.ya?ml|readme\.md)$/i.test(item.path)).slice(0, 3);
-  return [...topDirectories, ...childDirectories, ...importantFiles].slice(0, 12).map(item => {
+  const clean = tree.filter(item => item.path && !item.path.split('/').some(part => part.startsWith('.') && part !== '.github') && !/(^|\/)(node_modules|vendor|dist|build|coverage|target)(\/|$)/i.test(item.path));
+  const roleFor = path => {
+    const value = path.toLowerCase();
+    if (/(^|\/)(app|apps|web|ui|frontend|client|components?)(\/|$)/.test(value)) return 'interface';
+    if (/(^|\/)(api|server|backend|services?|handlers?|controllers?)(\/|$)/.test(value)) return 'service layer';
+    if (/(^|\/)(core|domain|lib|src|internal|pkg)(\/|$)/.test(value)) return 'core logic';
+    if (/(^|\/)(data|database|db|models?|storage|migrations?)(\/|$)/.test(value)) return 'data layer';
+    if (/(^|\/)(test|tests|spec|specs|e2e|fixtures?)(\/|$)/.test(value)) return 'quality';
+    if (/(^|\/)(docs?|examples?|samples?)(\/|$)/.test(value)) return 'documentation';
+    if (/(^|\/)(deploy|infra|ops|docker|k8s|scripts?|\.github)(\/|$)/.test(value)) return 'infrastructure';
+    if (/\.(json|toml|ya?ml|lock)$|dockerfile|makefile/i.test(value)) return 'configuration';
+    return 'module';
+  };
+  const rolePriority = new Map(['app','apps','src','packages','server','api','client','web','core','lib','internal','pkg','tests','docs','.github'].map((name, index) => [name, index]));
+  const topDirectories = clean.filter(item => item.type === 'tree' && !item.path.includes('/')).map(item => ({ ...item, childCount: clean.filter(child => child.path.startsWith(`${item.path}/`)).length })).sort((a, b) => (rolePriority.get(a.path.toLowerCase()) ?? 99) - (rolePriority.get(b.path.toLowerCase()) ?? 99) || b.childCount - a.childCount).slice(0, 7);
+  const childDirectories = topDirectories.flatMap(parent => clean.filter(item => item.type === 'tree' && item.path.startsWith(`${parent.path}/`) && item.path.split('/').length === 2).map(item => ({ ...item, childCount: clean.filter(child => child.path.startsWith(`${item.path}/`)).length })).sort((a, b) => b.childCount - a.childCount).slice(0, 2));
+  const importantFiles = clean.filter(item => item.type === 'blob' && !item.path.includes('/') && /^(package\.json|pyproject\.toml|cargo\.toml|go\.mod|dockerfile|compose\.ya?ml|makefile|readme\.md|requirements\.txt)$/i.test(item.path)).slice(0, 4);
+  return [...topDirectories, ...childDirectories, ...importantFiles].slice(0, 18).map(item => {
     const segments = item.path.split('/');
     return {
       name: segments.at(-1),
       path: item.path,
       parent: segments.length > 1 ? segments[0] : '',
       type: item.type === 'tree' ? 'dir' : 'file',
+      role: roleFor(item.path),
       html_url: `https://github.com/${fullName}/${item.type === 'tree' ? 'tree' : 'blob'}/${encodeURIComponent(branch)}/${item.path.split('/').map(encodeURIComponent).join('/')}`
     };
   });
@@ -695,25 +701,42 @@ function selectArchitectureEntries(tree, fullName, branch) {
 function compileTreeMermaid(entries, repositoryName) {
   const cleanLabel = value => String(value).replace(/"/g, '#quot;').replace(/[<>]/g, '');
   const idByPath = new Map(entries.map((entry, index) => [entry.path, `tree_node_${index}`]));
-  const nodes = entries.map((entry, index) => `${idByPath.get(entry.path)}["${cleanLabel(entry.name)}<br/>${entry.type === 'dir' ? 'module' : 'project file'}"]`).join('\n');
+  const classFor = entry => entry.role === 'interface' ? 'interface' : entry.role === 'service layer' ? 'service' : entry.role === 'data layer' ? 'data' : entry.role === 'quality' ? 'quality' : entry.role === 'infrastructure' ? 'infra' : entry.role === 'configuration' ? 'config' : 'module';
+  const nodes = entries.map(entry => `${idByPath.get(entry.path)}["${cleanLabel(entry.name)}<br/>${cleanLabel(entry.role)}"]:::${classFor(entry)}`).join('\n');
   const edges = entries.map(entry => {
     const parentId = entry.parent ? idByPath.get(entry.parent) : '';
-    return `${parentId || 'repository_root'} -->|"${entry.type === 'dir' ? 'contains' : 'configures'}"| ${idByPath.get(entry.path)}`;
+    return `${parentId || 'repository_root'} ${entry.type === 'dir' ? '-->' : '-.->'} ${idByPath.get(entry.path)}`;
   }).join('\n');
   const links = entries.filter(entry => entry.html_url).map(entry => `click ${idByPath.get(entry.path)} "${entry.html_url}"`).join('\n');
-  return `flowchart TD\nrepository_root["${cleanLabel(repositoryName)}<br/>repository"]\n${nodes}\n${edges}\n${links}`;
+  return `flowchart LR
+repository_root["${cleanLabel(repositoryName)}<br/>repository"]:::root
+${nodes}
+${edges}
+${links}
+classDef root fill:#c8f04e,stroke:#9aba32,color:#1f2900,stroke-width:2px
+classDef module fill:#f3f5f0,stroke:#98a39a,color:#243027
+classDef interface fill:#e8f0ff,stroke:#7f9ed8,color:#21334d
+classDef service fill:#fff0dc,stroke:#d3a45f,color:#4e3515
+classDef data fill:#e5f5ea,stroke:#79ad89,color:#21422b
+classDef quality fill:#f4eaff,stroke:#aa88c6,color:#402752
+classDef infra fill:#e9edeb,stroke:#78847b,color:#26302a
+classDef config fill:#fff8d9,stroke:#c3ad52,color:#493f12`;
 }
 
 async function loadArchitecturePreview(element) {
   const fullName = element.dataset.architectureRepo;
   if (architectureCache.has(fullName)) {
     const cached = architectureCache.get(fullName);
+    const sourceLabel = $('.architecture-source', element);
+    if (sourceLabel) sourceLabel.textContent = cached.kind === 'mermaid' ? 'GitDiagram' : 'Live GitHub tree';
     await renderMermaidArchitecture(element, cached.source);
     return;
   }
   try {
     const source = await fetchGitDiagramGraph(fullName);
     architectureCache.set(fullName, { kind: 'mermaid', source });
+    const sourceLabel = $('.architecture-source', element);
+    if (sourceLabel) sourceLabel.textContent = 'GitDiagram';
     await renderMermaidArchitecture(element, source);
     return;
   } catch {}
@@ -726,6 +749,8 @@ async function loadArchitecturePreview(element) {
     if (!entries.length) throw new Error('Repository structure unavailable');
     const source = compileTreeMermaid(entries, fullName.split('/')[1]);
     architectureCache.set(fullName, { kind: 'tree', source });
+    const sourceLabel = $('.architecture-source', element);
+    if (sourceLabel) sourceLabel.textContent = 'Live GitHub tree';
     await renderMermaidArchitecture(element, source);
   } catch {
     renderArchitectureUnavailable(element);

@@ -174,6 +174,24 @@ async function handleApi(request, response, url) {
     sendJson(response, 200, { ok: true });
     return true;
   }
+  if (url.pathname === '/api/architecture' && request.method === 'GET') {
+    const repository = url.searchParams.get('repository') || '';
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) { sendJson(response, 400, { error: 'Invalid repository.' }); return true; }
+    try {
+      const upstream = await fetch('https://gitdiagram.com/mcp', {
+        method: 'POST',
+        headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json', 'User-Agent': 'GitExplore/1.0' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_repository_diagram', arguments: { repository } } })
+      });
+      if (!upstream.ok) throw new Error('GitDiagram request failed');
+      const eventStream = await upstream.text();
+      const payloads = eventStream.split(/\r?\n/).filter(line => line.startsWith('data: ')).map(line => { try { return JSON.parse(line.slice(6)); } catch { return null; } }).filter(Boolean);
+      const artifact = payloads.map(payload => payload.result?._meta?.['com.gitdiagram/diagram']).find(value => value?.status === 'found' && value.mermaid);
+      if (!artifact) { sendJson(response, 404, { error: 'GitDiagram has not generated this repository yet.' }); return true; }
+      sendJson(response, 200, { provider: 'gitdiagram', mermaid: artifact.mermaid });
+    } catch { sendJson(response, 502, { error: 'GitDiagram is temporarily unavailable.' }); }
+    return true;
+  }
   if (url.pathname === '/api/translate' && request.method === 'POST') {
     if (!sameOrigin(request)) { sendJson(response, 403, { error: 'Invalid origin' }); return true; }
     const input = await readJson(request);

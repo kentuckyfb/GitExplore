@@ -188,6 +188,26 @@ module.exports = async function handler(req, res) {
     return response.ok ? json(res, 201, { id: result.id, html_url: result.html_url }) : json(res, response.status, { error: result.message || 'GitHub rejected the comment.' });
   }
 
+  if (path === 'architecture' && req.method === 'GET') {
+    const repository = new URL(req.url, appOrigin).searchParams.get('repository') || '';
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) return json(res, 400, { error: 'Invalid repository.' });
+    try {
+      const response = await fetch('https://gitdiagram.com/mcp', {
+        method: 'POST',
+        headers: { Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json', 'User-Agent': 'GitExplore/1.0' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_repository_diagram', arguments: { repository } } })
+      });
+      if (!response.ok) throw new Error('GitDiagram request failed');
+      const eventStream = await response.text();
+      const payloads = eventStream.split(/\r?\n/).filter(line => line.startsWith('data: ')).map(line => { try { return JSON.parse(line.slice(6)); } catch { return null; } }).filter(Boolean);
+      const artifact = payloads.map(payload => payload.result?._meta?.['com.gitdiagram/diagram']).find(value => value?.status === 'found' && value.mermaid);
+      if (!artifact) return json(res, 404, { error: 'GitDiagram has not generated this repository yet.' });
+      return json(res, 200, { provider: 'gitdiagram', mermaid: artifact.mermaid });
+    } catch {
+      return json(res, 502, { error: 'GitDiagram is temporarily unavailable.' });
+    }
+  }
+
   if (path === 'translate' && req.method === 'POST') {
     if (!sameOrigin(req)) return json(res, 403, { error: 'Invalid origin' });
     const body = input(req);
