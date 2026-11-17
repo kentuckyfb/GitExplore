@@ -44,6 +44,6 @@ The repository includes Vercel serverless routes for OAuth, GitHub replies, and 
 - `COOKIE_SECRET` (at least 24 random characters)
 - `APP_ORIGIN=https://gitexplore-dist.vercel.app`
 
-Use `https://gitexplore-dist.vercel.app/api/auth/github/callback` as the GitHub OAuth App authorization callback URL. Keep the Vercel project root at the repository root; `vercel.json` serves the static app from `dist/` while preserving `/api/*` functions.
+Use `https://gitexplore-dist.vercel.app/api/auth/github/callback` as the GitHub OAuth App authorization callback URL. Leave Vercel's **Root Directory** field empty (do not set it to `dist`); `vercel.json` serves the static app from `dist/` while preserving `/api/*` functions.
 
 Public discovery and GitHub discussion reading work without authentication. Saved repositories and likes remain browser-local.
