@@ -91,6 +91,16 @@ async function translateText(text, source) {
     if (!translated) throw new Error('Empty primary translation');
     return translated;
   } catch {
+    try {
+      const endpoint = new URL('https://clients5.google.com/translate_a/t');
+      Object.entries({ client: 'dict-chrome-ex', sl: source, tl: 'en', q: text }).forEach(([key, value]) => endpoint.searchParams.set(key, value));
+      const response = await fetch(endpoint, { headers: { 'User-Agent': 'GitExplore/1.0' } });
+      if (!response.ok) throw new Error('Secondary translation failed');
+      const payload = await response.json();
+      const translated = Array.isArray(payload) ? payload.map(part => Array.isArray(part) ? (part[0] || '') : '').join('') : '';
+      if (!translated) throw new Error('Empty secondary translation');
+      return translated;
+    } catch {}
     const languageMap = { zh: 'zh-CN', pt: 'pt-PT' };
     const from = source === 'auto' ? 'autodetect' : (languageMap[source] || source);
     const pieces = [];
