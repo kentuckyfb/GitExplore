@@ -39,6 +39,7 @@
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-fit" viewBox="0 0 24 24"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"/><path d="m4 8 4-4m12 4-4-4m4 12-4 4M4 16l4 4"/></symbol>
     <symbol id="i-translate" viewBox="0 0 24 24"><path d="M4 5h9M8.5 3v2M6 8c1.2 2.7 3.1 4.8 6 6M12 8c-1.4 3.4-4 6-8 7"/><path d="m14 20 3.5-9 3.5 9M15.2 17h4.6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></symbol>
   </svg>
 
   <div class="app-shell">
@@ -48,7 +49,7 @@
           <nav class="primary-nav" aria-label="Main navigation">
             <button class="nav-item active" data-view="discover"><svg><use href="#i-compass"/></svg><span>Discover</span></button>
             <button class="nav-item" data-view="trending"><svg><use href="#i-trend"/></svg><span>Trending</span></button>
-            <button class="nav-item" data-view="saved"><svg><use href="#i-bookmark"/></svg><span>Saved</span><span class="nav-count" id="savedCount">0</span></button>
+            <button class="nav-item" data-view="profile"><span class="nav-profile-avatar" data-profile-avatar><svg><use href="#i-user"/></svg></span><span>Profile</span><span class="nav-count" data-saved-count>0</span></button>
           </nav>
           <span class="sr-only" id="sectionEyebrow">Discover repositories</span>
           <span class="sr-only" id="sectionTitle">Discover</span>
@@ -80,7 +81,7 @@
   <nav class="mobile-nav" aria-label="Mobile navigation">
     <button class="active" data-view="discover"><svg><use href="#i-compass"/></svg><span>Discover</span></button>
     <button data-view="trending"><svg><use href="#i-trend"/></svg><span>Trending</span></button>
-    <button data-view="saved"><svg><use href="#i-bookmark"/></svg><span>Saved</span></button>
+    <button data-view="profile"><span class="nav-profile-avatar" data-profile-avatar><svg><use href="#i-user"/></svg></span><span>Profile</span></button>
     <button id="mobileFilters"><svg><use href="#i-filter"/></svg><span>Filters</span></button>
   </nav>
 

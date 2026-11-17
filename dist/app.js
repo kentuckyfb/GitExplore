@@ -44,6 +44,7 @@ const techDescriptions = {
 
 const state = { repos: fallbackRepos, view: 'discover', language: 'All', framework: 'Any', topic: 'Any', discovery: 'balanced', sort: 'stars', page: 1, cycle: 0, loading: false, query: '', activeRepo: null, requestId: 0 };
 const saved = new Set(JSON.parse(localStorage.getItem('repodive:saved') || '[]'));
+const savedRepoDetails = new Map(Object.entries(JSON.parse(localStorage.getItem('gitexplore:saved-details') || '{}')));
 const liked = new Set(JSON.parse(localStorage.getItem('repodive:liked') || '[]'));
 const seen = new Set(JSON.parse(localStorage.getItem('repodive:seen') || '[]'));
 const delivered = new Set();
@@ -65,6 +66,7 @@ const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;
 const fmt = n => n >= 1e6 ? `${(n/1e6).toFixed(1)}m` : n >= 1e3 ? `${(n/1e3).toFixed(n >= 1e4 ? 0 : 1)}k` : String(n || 0);
 const repoKey = repo => repo.full_name;
 const persistSet = (key, set) => localStorage.setItem(key, JSON.stringify([...set]));
+const persistSavedDetails = () => localStorage.setItem('gitexplore:saved-details', JSON.stringify(Object.fromEntries(savedRepoDetails)));
 const jobSignal = /(^|[\s/_-])(jobs?|job[- ]?board|hiring|careers?|internships?|vacancies|recruiting)(?=$|[\s/_-])/i;
 
 function isJobsRepo(repo) {
@@ -88,7 +90,7 @@ function renderFilters() {
 }
 
 function getFilteredRepos() {
-  let repos = state.view === 'saved' ? state.repos.filter(r => saved.has(repoKey(r))) : state.repos;
+  let repos = state.repos;
   if (state.discovery === 'hidden') repos = repos.filter(repo => !isJobsRepo(repo));
   if (state.discovery === 'jobs') repos = repos.filter(isJobsRepo);
   if (state.query) {
@@ -99,13 +101,66 @@ function getFilteredRepos() {
 }
 
 function renderFeed() {
+  if (state.view === 'profile') { renderProfile(); return; }
+  feed.classList.remove('profile-feed');
   const repos = getFilteredRepos();
   if (!repos.length) {
-    feed.innerHTML = `<div class="empty-state"><h2>${state.view === 'saved' ? 'Your reading list is empty.' : 'No repositories found.'}</h2><p>${state.view === 'saved' ? 'Save interesting projects and they will wait here for your next deep dive.' : 'Try a broader stack filter or a different search.'}</p></div>`;
+    feed.innerHTML = `<div class="empty-state"><h2>No repositories found.</h2><p>Try a broader stack filter or a different search.</p></div>`;
     return;
   }
   feed.innerHTML = repos.map((repo, index) => repoCard(repo, index)).join('');
   attachCardEvents();
+}
+
+function repoSnapshot(repo) {
+  return { id: repo.id, name: repo.name, full_name: repo.full_name, html_url: repo.html_url, description: repo.description, stargazers_count: repo.stargazers_count, language: repo.language, topics: repo.topics || [], owner: { login: repo.owner?.login || repo.full_name.split('/')[0], avatar_url: repo.owner?.avatar_url || `https://github.com/${repo.full_name.split('/')[0]}.png` } };
+}
+
+function toggleSavedRepository(button) {
+  const key = button.dataset.key;
+  const removing = saved.has(key);
+  if (removing) { saved.delete(key); savedRepoDetails.delete(key); }
+  else {
+    saved.add(key);
+    const repo = state.repos.find(item => item.full_name === key);
+    if (repo) savedRepoDetails.set(key, repoSnapshot(repo));
+  }
+  button.classList.toggle('active', !removing);
+  persistSet('repodive:saved', saved);
+  persistSavedDetails();
+  updateSavedCount();
+  showToast(removing ? 'Removed from saved' : 'Saved to your list');
+}
+
+async function loadSavedRepositories() {
+  const results = [];
+  for (const key of saved) {
+    let repo = savedRepoDetails.get(key);
+    if (!repo) {
+      try {
+        const response = await fetch(`https://api.github.com/repos/${key}`, { headers: { Accept: 'application/vnd.github+json' } });
+        if (response.ok) { repo = repoSnapshot(await response.json()); savedRepoDetails.set(key, repo); }
+      } catch {}
+    }
+    if (repo) results.push(repo);
+  }
+  persistSavedDetails();
+  return results;
+}
+
+async function renderProfile() {
+  feed.classList.add('profile-feed');
+  feed.innerHTML = `<section class="profile-view"><div class="profile-loading">${icon('i-user')}<span>Loading your profile…</span></div></section>`;
+  await loadGithubSession();
+  const repositories = await loadSavedRepositories();
+  if (state.view !== 'profile') return;
+  const identity = githubUser ? `<img src="${esc(githubUser.avatar_url)}" alt="" /><div><span>GitHub account</span><h2>@${esc(githubUser.login)}</h2><a href="${esc(githubUser.html_url)}" target="_blank" rel="noopener">View GitHub profile ${icon('i-arrow')}</a></div>` : `<div class="profile-placeholder">${icon('i-user')}</div><div><span>Your GitExplore profile</span><h2>Connect GitHub</h2><p>Sign in to reply to repository discussions with your GitHub identity.</p></div>`;
+  const savedMarkup = repositories.length ? repositories.map(repo => `<article class="saved-repo-card"><a class="saved-repo-owner" href="https://github.com/${encodeURIComponent(repo.owner.login)}" target="_blank" rel="noopener"><img src="${esc(repo.owner.avatar_url)}" alt="" /><span>@${esc(repo.owner.login)}</span></a><h3>${esc(repo.name)}</h3><p>${esc(repo.description || 'A saved public repository.')}</p><div class="saved-repo-meta"><span>${repo.language ? esc(repo.language) : 'Mixed stack'}</span><span>${fmt(repo.stargazers_count)} stars</span></div><div class="saved-repo-actions"><button class="profile-unsave" data-key="${esc(repo.full_name)}">${icon('i-bookmark')} Remove</button><a href="${esc(repo.html_url)}" target="_blank" rel="noopener">Open repo ${icon('i-arrow')}</a></div></article>`).join('') : `<div class="profile-empty">${icon('i-bookmark')}<strong>No saved repositories yet</strong><span>Use the bookmark button while exploring and they will appear here.</span></div>`;
+  feed.innerHTML = `<section class="profile-view"><header class="profile-header"><div class="profile-identity">${identity}</div><button class="profile-auth-button" id="profileGithubAuth">${githubUser ? 'Sign out' : `${icon('i-github')} Sign in with GitHub`}</button></header><div class="profile-saved-head"><div><span>YOUR LIBRARY</span><h2>Saved repositories</h2></div><strong>${repositories.length}</strong></div><div class="saved-repo-list">${savedMarkup}</div></section>`;
+  $('#profileGithubAuth').addEventListener('click', handleGithubAuth);
+  $$('.profile-unsave', feed).forEach(button => button.addEventListener('click', () => {
+    saved.delete(button.dataset.key); savedRepoDetails.delete(button.dataset.key); persistSet('repodive:saved', saved); persistSavedDetails(); updateSavedCount(); showToast('Removed from saved'); renderProfile();
+  }));
 }
 
 function repoCard(repo, index) {
@@ -623,18 +678,18 @@ function hydrateReadmes() {
 
 function attachCardEvents() {
   $$('.like-button', feed).forEach(btn => btn.addEventListener('click', () => toggleSet(btn, liked, 'repodive:liked', 'Starred for this session')));
-  $$('.save-button', feed).forEach(btn => btn.addEventListener('click', () => { toggleSet(btn, saved, 'repodive:saved', saved.has(btn.dataset.key) ? 'Removed from saved' : 'Saved to your list'); updateSavedCount(); if (state.view === 'saved') renderFeed(); }));
+  $$('.save-button', feed).forEach(btn => btn.addEventListener('click', () => toggleSavedRepository(btn)));
   $$('.share-button', feed).forEach(btn => btn.addEventListener('click', async () => { try { await navigator.clipboard.writeText(btn.dataset.url); showToast('Repository link copied'); } catch { showToast('Copy unavailable — open the repository instead'); } }));
   $$('.comment-button', feed).forEach(btn => btn.addEventListener('click', () => openComments(btn.dataset.key)));
   hydrateReadmes();
   observeSeenRepos();
 }
 function toggleSet(btn, set, storageKey, message) { const key = btn.dataset.key; set.has(key) ? set.delete(key) : set.add(key); btn.classList.toggle('active', set.has(key)); persistSet(storageKey, set); showToast(message); }
-function updateSavedCount() { $('#savedCount').textContent = saved.size; }
+function updateSavedCount() { $$('[data-saved-count]').forEach(element => { element.textContent = saved.size; }); }
 
 function observeSeenRepos() {
   seenObserver?.disconnect();
-  if (state.view === 'saved') return;
+  if (state.view === 'profile') return;
   seenObserver = new IntersectionObserver(entries => entries.forEach(entry => {
     if (!entry.isIntersecting || entry.intersectionRatio < .62) return;
     const key = entry.target.dataset.repoKey;
@@ -720,10 +775,10 @@ function filterFallback() {
 function setView(view) {
   state.view = view;
   $$('.nav-item, .mobile-nav [data-view]').forEach(el => el.classList.toggle('active', el.dataset.view === view));
-  const copy = view === 'saved' ? ['YOUR READING LIST', 'Projects worth returning to.'] : view === 'trending' ? ['MOVING FAST RIGHT NOW', 'See what builders are shipping.'] : ['FOR CURIOUS BUILDERS', 'Find code worth reading.'];
+  const copy = view === 'profile' ? ['YOUR PROFILE', 'Saved projects and GitHub identity.'] : view === 'trending' ? ['MOVING FAST RIGHT NOW', 'See what builders are shipping.'] : ['FOR CURIOUS BUILDERS', 'Find code worth reading.'];
   $('#sectionEyebrow').textContent = copy[0]; $('#sectionTitle').textContent = copy[1];
   feed.scrollTop = 0;
-  view === 'saved' ? renderFeed() : loadRepos();
+  view === 'profile' ? renderProfile() : loadRepos();
 }
 function setLanguage(language) { state.language = language; renderFilters(); bindFilterButtons(); feed.scrollTop = 0; loadRepos(); }
 function setFramework(framework) { state.framework = framework; renderFilters(); bindFilterButtons(); feed.scrollTop = 0; loadRepos(); }
@@ -776,6 +831,7 @@ function updateGithubIdentity() {
   const button = $('#githubSignIn');
   const avatar = $('.comment-form .comment-avatar');
   const textarea = $('#commentInput');
+  $$('[data-profile-avatar]').forEach(element => { element.innerHTML = githubUser?.avatar_url ? `<img src="${esc(githubUser.avatar_url)}" alt="" />` : icon('i-user'); });
   if (githubUser?.login) {
     title.textContent = `Signed in as @${githubUser.login}`;
     copy.textContent = 'Replies are posted directly to the selected GitHub issue.';
@@ -790,6 +846,25 @@ function updateGithubIdentity() {
     button.dataset.action = 'signin';
     avatar.innerHTML = icon('i-github');
     textarea.disabled = true;
+  }
+}
+
+async function handleGithubAuth() {
+  if (githubUser) {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    githubUser = null;
+    updateGithubIdentity();
+    if (state.view === 'profile') renderProfile();
+    showToast('Signed out of GitHub');
+    return;
+  }
+  try {
+    const response = await fetch('/api/auth/config');
+    const config = response.ok ? await response.json() : { configured: false };
+    if (!config.configured) throw new Error('OAuth not configured');
+    location.href = `/api/auth/github?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
+  } catch {
+    showToast('GitHub sign-in is not configured on this deployment');
   }
 }
 
@@ -962,23 +1037,7 @@ $('#dismissInstall').addEventListener('click', () => { localStorage.setItem('git
 $('#fullscreenOnly').addEventListener('click', async () => { await enterFullscreen(); localStorage.setItem('gitexplore:install-offer', 'fullscreen'); $('#installDialog').close(); });
 $('#installApp').addEventListener('click', installApplication);
 $('#installDialog').addEventListener('click', e => { if (e.target === $('#installDialog')) { localStorage.setItem('gitexplore:install-offer', 'dismissed'); $('#installDialog').close(); } });
-$('#githubSignIn').addEventListener('click', async () => {
-  if ($('#githubSignIn').dataset.action === 'signout') {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-    githubUser = null;
-    updateGithubIdentity();
-    showToast('Signed out of GitHub');
-    return;
-  }
-  try {
-    const response = await fetch('/api/auth/config');
-    const config = response.ok ? await response.json() : { configured: false };
-    if (!config.configured) throw new Error('OAuth not configured');
-    location.href = `/api/auth/github?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
-  } catch {
-    showToast('GitHub sign-in needs the server OAuth variables from .env.example');
-  }
-});
+$('#githubSignIn').addEventListener('click', handleGithubAuth);
 $('#commentForm').addEventListener('submit', async e => {
   e.preventDefault();
   const input = $('#commentInput');
@@ -1046,7 +1105,7 @@ feed.addEventListener('click', e => {
   const preview = e.target.closest('.readme-preview');
   if (preview) { const card = preview.closest('.repo-card'); if (card.dataset.activePanel !== 'readme') setCardPanel(card, 'readme'); }
 });
-feed.addEventListener('scroll', () => { if (state.view !== 'saved' && !state.loading && feed.scrollTop + feed.clientHeight > feed.scrollHeight - 500) { state.page += 1; loadRepos({ append: true }); } }, { passive: true });
+feed.addEventListener('scroll', () => { if (state.view !== 'profile' && !state.loading && feed.scrollTop + feed.clientHeight > feed.scrollHeight - 500) { state.page += 1; loadRepos({ append: true }); } }, { passive: true });
 
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
